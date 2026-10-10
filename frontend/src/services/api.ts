@@ -50,6 +50,11 @@ export const api = {
 
   // Academic Management
   getDepartments: () => request<any>('/academic/departments'),
+  createDepartment: (data: { code: string; name: string }) =>
+    request<any>('/academic/departments', {
+      method: 'POST',
+      body: JSON.stringify(data),
+    }),
   getBatches: () => request<any>('/academic/batches'),
   getOfferings: () => request<any>('/academic/offerings'),
   createOffering: (data: any) =>

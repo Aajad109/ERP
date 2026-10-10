@@ -8,12 +8,15 @@ import { FacultyDashboard } from './pages/FacultyDashboard';
 import { AcademicAdminDashboard } from './pages/AcademicAdminDashboard';
 import { ExamAdminDashboard } from './pages/ExamAdminDashboard';
 import { CampusHub } from './pages/CampusHub';
+import { PortalLayout, NavItem } from './components/PortalLayout';
+import { LayoutDashboard, Flame, Tag } from 'lucide-react';
 
 export function App() {
   const [currentUser, setCurrentUser] = useState<any>(null);
   const [currentView, setCurrentView] = useState<'ERP' | 'CAMPUS_HUB'>('ERP');
   const [loading, setLoading] = useState<boolean>(true);
   const [switchingRole, setSwitchingRole] = useState<boolean>(false);
+  const [hubTab, setHubTab] = useState<'EVENTS' | 'LOST_FOUND'>('LOST_FOUND');
 
   useEffect(() => {
     checkAuth();
@@ -79,30 +82,37 @@ export function App() {
   }
 
   if (currentView === 'CAMPUS_HUB') {
+    const hubNavItems: NavItem[] = [
+      { id: 'lost-found', label: 'Lost & Found Central', icon: Tag },
+      { id: 'trending-events', label: 'Trending Events & Fests', icon: Flame },
+      { id: 'return-erp', label: 'Return to Institutional ERP', icon: LayoutDashboard },
+    ];
+
+    const handleHubNavSelect = (id: string) => {
+      if (id === 'return-erp') {
+        setCurrentView('ERP');
+      } else if (id === 'lost-found') {
+        setHubTab('LOST_FOUND');
+      } else if (id === 'trending-events') {
+        setHubTab('EVENTS');
+      }
+    };
+
     return (
-      <div className="min-h-screen bg-slate-100 flex flex-col font-sans text-slate-900">
-        <Navbar
-          currentUser={currentUser}
-          currentView={currentView}
-          onViewChange={setCurrentView}
-          onLogout={handleLogout}
-          onSelectRole={handleQuickSwitchUser}
-        />
-        <RoleSwitcher
-          currentEmail={currentUser.email}
-          onSelectUser={handleQuickSwitchUser}
-          isLoading={switchingRole}
-        />
-        <main className="flex-1 py-6">
-          <CampusHub currentUser={currentUser} />
-        </main>
-        <footer className="bg-white border-t border-slate-200 py-4 text-center text-xs text-slate-500">
-          <div className="max-w-7xl mx-auto px-4 flex flex-col sm:flex-row justify-between items-center gap-2">
-            <span>Apex Engineering College • Shared Campus Hub</span>
-            <span className="font-mono text-slate-400">Trending Events &amp; Multi-Image Lost &amp; Found</span>
-          </div>
-        </footer>
-      </div>
+      <PortalLayout
+        currentUser={currentUser}
+        currentRoleTitle="Campus Hub Central"
+        navItems={hubNavItems}
+        activeNavId={hubTab === 'LOST_FOUND' ? 'lost-found' : 'trending-events'}
+        onNavSelect={handleHubNavSelect}
+        currentView="CAMPUS_HUB"
+        onViewChange={setCurrentView}
+        onLogout={handleLogout}
+        onQuickSwitchUser={handleQuickSwitchUser}
+        switchingRole={switchingRole}
+      >
+        <CampusHub currentUser={currentUser} initialTab={hubTab} embedded={true} />
+      </PortalLayout>
     );
   }
 

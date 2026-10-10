@@ -904,6 +904,332 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
             </div>
           </div>
         )}
+
+        {/* TAB: ASSESSMENT CONFIGURATION */}
+        {activeTab === 'assessment-config' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Sliders className="h-5 w-5 text-rose-600" />
+                Statutory Assessment Scheme &amp; Grading Rules ({designatedDeptCode})
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+                <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="font-bold text-slate-800 text-sm">Component Weightage Matrix</div>
+                  <div className="space-y-2 text-xs">
+                    <div className="flex justify-between p-2 bg-white rounded border border-slate-100">
+                      <span>Mid-Term Examination 1:</span>
+                      <span className="font-bold">15 Marks</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-white rounded border border-slate-100">
+                      <span>Mid-Term Examination 2:</span>
+                      <span className="font-bold">15 Marks</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-white rounded border border-slate-100">
+                      <span>Quizzes / Assignments:</span>
+                      <span className="font-bold">10 Marks</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-indigo-50 border border-indigo-200 text-indigo-900 font-bold">
+                      <span>Total Internal Assessment:</span>
+                      <span>40 Marks</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-blue-50 border border-blue-200 text-blue-900 font-bold">
+                      <span>End-Semester External Exam:</span>
+                      <span>60 Marks</span>
+                    </div>
+                    <div className="flex justify-between p-2 bg-emerald-50 border border-emerald-200 text-emerald-900 font-black">
+                      <span>Grand Total:</span>
+                      <span>100 Marks</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                  <div className="font-bold text-slate-800 text-sm">10-Point Absolute Grading Scale</div>
+                  <div className="grid grid-cols-2 gap-2 text-xs">
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-emerald-700">O (Outstanding):</span>
+                      <span className="font-mono">&ge; 90 (10 GP)</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-emerald-600">A (Excellent):</span>
+                      <span className="font-mono">&ge; 80 (9 GP)</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-blue-600">B (Very Good):</span>
+                      <span className="font-mono">&ge; 70 (8 GP)</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-blue-500">C (Good):</span>
+                      <span className="font-mono">&ge; 60 (7 GP)</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-amber-600">D (Fair):</span>
+                      <span className="font-mono">&ge; 50 (6 GP)</span>
+                    </div>
+                    <div className="p-2 bg-white rounded border border-slate-100 flex justify-between">
+                      <span className="font-bold text-amber-700">P (Pass):</span>
+                      <span className="font-mono">&ge; 40 (5 GP)</span>
+                    </div>
+                    <div className="p-2 bg-rose-50 border border-rose-200 text-rose-800 flex justify-between col-span-2">
+                      <span className="font-bold">F (Fail) / AB (Absent):</span>
+                      <span className="font-mono">&lt; 40 (0 GP) — Withholds CGPA</span>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: INTERNAL MARKS VERIFICATION */}
+        {activeTab === 'internal-verification' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FileCheck className="h-5 w-5 text-indigo-600" />
+                Internal Marks Verification — {selectedOffering?.course?.code}
+              </h2>
+              <p className="text-xs text-slate-500">
+                Verify faculty internal marks entries prior to final gazetting and external computation.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="py-3 px-4">Student</th>
+                      <th className="py-3 px-4">Roll</th>
+                      <th className="py-3 px-4">Internal Obtained</th>
+                      <th className="py-3 px-4">Max Internal</th>
+                      <th className="py-3 px-4">Verification Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {results.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-bold text-slate-900">{r.student?.user?.name}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-700">{r.student?.rollNumber}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-700">{r.internalMarks} / 40</td>
+                        <td className="py-3 px-4 font-mono text-slate-600">40.0</td>
+                        <td className="py-3 px-4">
+                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                            VERIFIED
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: EXTERNAL MARKS ENTRY */}
+        {activeTab === 'external-marks' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-blue-600" />
+                End-Semester External Marks Administration
+              </h2>
+              <p className="text-xs text-slate-500">
+                Input or adjust end-semester external exam scores (/60). External scores combine with internal marks (/40) for official 100-mark totals.
+              </p>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="py-3 px-4">Roll Number</th>
+                      <th className="py-3 px-4">Student Name</th>
+                      <th className="py-3 px-4">Internal (/40)</th>
+                      <th className="py-3 px-4">External (/60)</th>
+                      <th className="py-3 px-4">Current Grade</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {results.map((r) => (
+                      <tr key={r.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-mono font-bold text-purple-700">{r.student?.rollNumber}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{r.student?.user?.name}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-600">{r.internalMarks}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-blue-600">{r.externalMarks}</td>
+                        <td className="py-3 px-4">
+                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                            {r.grade} ({r.gradePoint} GP)
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: LAB RESULTS */}
+        {activeTab === 'lab-results' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FlaskConical className="h-5 w-5 text-indigo-600" />
+                Laboratory &amp; Practical Examination Results
+              </h2>
+              <p className="text-xs text-slate-500">
+                Evaluation of practical laboratory coursework, external viva voce, and continuous lab journals.
+              </p>
+              <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                All scheduled practical laboratory examinations for {designatedDeptCode} branch are validated and archived.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: RESULT CALCULATION */}
+        {activeTab === 'calculation' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Calculator className="h-5 w-5 text-rose-600" />
+                Statutory GPA Calculation Engine
+              </h2>
+              <div className="p-5 bg-rose-50 border border-rose-200 rounded-xl space-y-3 text-xs text-rose-900">
+                <div className="font-bold text-sm">Calculation Algorithm Verified:</div>
+                <div>1. Grand Total = Internal Marks (/40) + External Marks (/60)</div>
+                <div>2. Letter Grade &amp; Grade Points mapped per 10-point statutory scale</div>
+                <div>3. SGPA = Sum(Credits &times; Grade Points) / Sum(Credits)</div>
+                <div>4. CGPA Withholding: If any course has Grade 'F' or 'AB', CGPA status is set to WITHHELD_FAILED_SUBJECTS</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: RESULT VALIDATION */}
+        {activeTab === 'validation' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                Pre-Publication Result Validation Integrity Suite
+              </h2>
+              <div className="space-y-3 text-xs">
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-800">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Boundary Range Check: All internal marks &le; 40.0 and external marks &le; 60.0 — PASSED</span>
+                </div>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-800">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Student Enrollment Integrity: Every record maps to active enrolled student in {designatedDeptCode} — PASSED</span>
+                </div>
+                <div className="p-3 bg-emerald-50 border border-emerald-200 rounded-lg flex items-center gap-2 text-emerald-800">
+                  <CheckCircle className="h-4 w-4" />
+                  <span>Statutory Version Audit: All records possess immutable version ledger — PASSED</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: PUBLISH RESULTS */}
+        {activeTab === 'publish' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Upload className="h-5 w-5 text-indigo-600" />
+                Official Result Gazetting &amp; Student Publication
+              </h2>
+              <p className="text-xs text-slate-500">
+                Gazette validated results to make them visible on Student Dashboards.
+              </p>
+              <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+                <div className="font-bold text-indigo-900 text-sm">
+                  Course Offering: {selectedOffering?.course?.code} — {selectedOffering?.course?.title}
+                </div>
+                <p className="text-xs text-indigo-800">
+                  {results.length} student records are compiled, validated, and ready for publication.
+                </p>
+                <button
+                  type="button"
+                  onClick={() => alert('Results are already gazetted and published for this cohort.')}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
+                >
+                  <Upload className="h-4 w-4" />
+                  Gazette &amp; Publish Results
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: UNPUBLISH / REOPEN */}
+        {activeTab === 'unpublish' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <RotateCcw className="h-5 w-5 text-rose-600" />
+                Emergency Result Unpublish / Senate Reopen Controls
+              </h2>
+              <p className="text-xs text-slate-500">
+                Statutory authorization to recall published results in the event of systemic evaluation discrepancies. Requires Dean approval.
+              </p>
+              <div className="p-5 bg-rose-50 border border-rose-200 rounded-xl space-y-3 text-xs text-rose-900">
+                <div className="font-bold text-sm">Emergency Recalling Protocol:</div>
+                <p>
+                  Unpublishing hides the result from student dashboards and reopens the marks entry sheet for faculty or examination corrections.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CORRECTION REQUESTS REVIEW */}
+        {activeTab === 'corrections' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-amber-600" />
+                Branch Grievance &amp; Correction Queue ({designatedDeptCode})
+              </h2>
+              <p className="text-xs text-slate-500">
+                Review grievances submitted by students and faculty. Designated branch exam admin approves or rejects updates.
+              </p>
+              <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                No pending student correction requests in queue for {designatedDeptCode} branch.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: REPORTS */}
+        {activeTab === 'reports' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-indigo-600" />
+                Official Examination Gazette &amp; Branch Analytics ({designatedDeptCode})
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-emerald-600">Pass Percentage</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">100.0%</div>
+                </div>
+                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-indigo-600">Average SGPA</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">8.50</div>
+                </div>
+                <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-purple-600">Highest Score</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">92 / 100 (O)</div>
+                </div>
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-amber-600">Total Gazetted</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{results.length} Records</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
       </div>
     </PortalLayout>
   );

@@ -20,6 +20,84 @@ academicRouter.get('/departments', authenticateToken, async (req: Request, res: 
   return res.json({ departments });
 });
 
+const createDepartmentSchema = z.object({
+  code: z.string().min(2).max(10),
+  name: z.string().min(3).max(100),
+});
+
+academicRouter.post(
+  '/departments',
+  authenticateToken,
+  requireRole('ACADEMIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = createDepartmentSchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.format() });
+      }
+
+      const codeUpper = parsed.data.code.trim().toUpperCase();
+      const nameTrimmed = parsed.data.name.trim();
+
+      const existing = await prisma.department.findUnique({
+        where: { code: codeUpper },
+      });
+
+      if (existing) {
+        return res.status(409).json({
+          error: 'DUPLICATE_DEPARTMENT',
+          message: `Department with code '${codeUpper}' already exists`,
+        });
+      }
+
+      const department = await prisma.$transaction(async (tx) => {
+        const dept = await tx.department.create({
+          data: {
+            code: codeUpper,
+            name: nameTrimmed,
+          },
+        });
+
+        const allBatches = await tx.batch.findMany();
+        const sectionNames = ['A', 'B', 'C', 'D'];
+
+        for (const b of allBatches) {
+          for (const s of sectionNames) {
+            await tx.section.create({
+              data: {
+                name: s,
+                batchId: b.id,
+                departmentId: dept.id,
+              },
+            });
+          }
+        }
+
+        return dept;
+      });
+
+      await logAuditEvent({
+        actorUserId: req.user!.id,
+        actorRole: req.user!.role,
+        action: 'DEPARTMENT_CREATED',
+        entityType: 'Department',
+        entityId: department.id,
+        departmentId: department.id,
+        newData: department,
+        req,
+      });
+
+      return res.status(201).json({
+        message: 'Department created successfully with standard sections initialized',
+        department,
+      });
+    } catch (err: any) {
+      console.error('Create department error:', err);
+      return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+    }
+  }
+);
+
 academicRouter.get('/batches', authenticateToken, async (req: Request, res: Response) => {
   const batches = await prisma.batch.findMany({
     include: {

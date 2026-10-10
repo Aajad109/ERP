@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { PortalLayout, NavItem } from '../components/PortalLayout';
+import { CampusHub } from './CampusHub';
 import {
   LayoutDashboard,
   BookOpen,
@@ -386,11 +387,7 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
   ];
 
   const handleNavSelect = (id: string) => {
-    if (id === 'campushub') {
-      onViewChange('CAMPUS_HUB');
-    } else {
-      setActiveTab(id);
-    }
+    setActiveTab(id);
   };
 
   return (
@@ -988,6 +985,236 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
                 </tbody>
               </table>
             </div>
+          </div>
+        )}
+
+        {/* TAB: ASSIGNED COURSES */}
+        {activeTab === 'assigned-courses' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <BookOpen className="h-5 w-5 text-indigo-600" />
+                Teaching Assignments &amp; Course Syllabus
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {assignedOfferings.map((off) => (
+                  <div key={off.id} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex justify-between items-start">
+                      <span className="font-mono font-bold text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
+                        {off.course?.code}
+                      </span>
+                      <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
+                        Active Term
+                      </span>
+                    </div>
+                    <div className="font-bold text-slate-900 text-base">{off.course?.title}</div>
+                    <div className="text-xs text-slate-600 space-y-1 pt-2 border-t border-slate-200">
+                      <div>Department: <span className="font-semibold text-slate-800">{off.course?.department?.name}</span></div>
+                      <div>Batch &amp; Section: <span className="font-semibold text-slate-800">{off.batch?.name} • Sec {off.section?.name}</span></div>
+                      <div>Credits: <span className="font-semibold text-slate-800">{off.course?.credits} Credits</span></div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: MY SECTIONS */}
+        {activeTab === 'sections' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="h-5 w-5 text-indigo-600" />
+                Assigned Student Sections &amp; Class Cohorts
+              </h2>
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {assignedOfferings.map((off) => (
+                  <div key={off.id} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="flex justify-between items-center">
+                      <span className="text-base font-black text-slate-900">
+                        {off.batch?.name} — Section {off.section?.name}
+                      </span>
+                      <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
+                        {off.course?.code}
+                      </span>
+                    </div>
+                    <p className="text-xs text-slate-600">
+                      Enrolled Students: <span className="font-bold text-slate-900">{enrollments.length}</span>
+                    </p>
+                    <div className="flex gap-2 pt-2">
+                      <button
+                        onClick={() => { setSelectedOfferingId(off.id); setActiveTab('roster'); }}
+                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-xs"
+                      >
+                        View Student Roster
+                      </button>
+                      <button
+                        onClick={() => { setSelectedOfferingId(off.id); setActiveTab('attendance'); }}
+                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs"
+                      >
+                        Record Attendance
+                      </button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: ASSESSMENT SUBMISSION */}
+        {activeTab === 'submission' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Lock className="h-5 w-5 text-indigo-600" />
+                Assessment Submission &amp; Examination Locking
+              </h2>
+              <p className="text-xs text-slate-500">
+                Finalize internal marks for submission to the Examination Branch. Once submitted, marks are locked against accidental modification.
+              </p>
+              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
+                <div className="font-bold text-amber-900 text-sm">Course Offering: {selectedOffering?.course?.code} — {selectedOffering?.course?.title}</div>
+                <p className="text-xs text-amber-800">
+                  Total student marks entered: {marksList.length}. Submitting will forward internal marks to the Examination Branch for official grade calculations.
+                </p>
+                <button
+                  onClick={handleSubmitOfferingMarks}
+                  disabled={submittingMarks}
+                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  <Lock className="h-4 w-4" />
+                  {submittingMarks ? 'Locking & Submitting...' : 'Confirm Submission to Examination Branch'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CORRECTION REQUESTS */}
+        {activeTab === 'corrections' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                Student Result Correction Requests
+              </h2>
+              <p className="text-xs text-slate-500">
+                Review student-initiated mark grievances. Faculty verifies the evaluation and proposes updated marks to the Examination Admin.
+              </p>
+              <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                No pending correction requests requiring review for this course offering.
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CLASS PERFORMANCE */}
+        {activeTab === 'performance' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-indigo-600" />
+                Class Performance Analytics
+              </h2>
+              <div className="h-80 mt-4">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={marksList.map((m: any) => ({
+                    student: m.student?.user?.name || 'Student',
+                    marks: m.marksObtained ?? 0,
+                    max: m.component?.maxMarks || 15,
+                  }))}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                    <XAxis dataKey="student" stroke="#64748b" fontSize={11} />
+                    <YAxis stroke="#64748b" fontSize={12} />
+                    <Tooltip />
+                    <Bar dataKey="marks" fill="#6366f1" radius={[4, 4, 0, 0]} name="Marks Obtained" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: ANNOUNCEMENTS */}
+        {activeTab === 'announcements' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Bell className="h-5 w-5 text-indigo-600" />
+                Campus &amp; Academic Announcements
+              </h2>
+              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                <div className="font-bold text-sm text-slate-900">Mid-Semester Marks Entry Cutoff Notice</div>
+                <p className="text-xs text-slate-600">
+                  All teaching faculty are requested to complete Mid-1 and Mid-2 internal assessment marks entry before the upcoming statutory senate deadline.
+                </p>
+                <div className="text-[10px] text-slate-400">Office of the Dean of Academic Affairs</div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: SCENARIO A OCC CONCURRENCY TEST */}
+        {activeTab === 'scenario-a' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Shield className="h-5 w-5 text-indigo-600" />
+                Scenario A: Optimistic Concurrency Control (OCC) Live Test Suite
+              </h2>
+              <p className="text-xs text-slate-500">
+                Demonstrates collision avoidance when concurrent faculty sessions edit the same mark record simultaneously.
+              </p>
+              <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
+                <p className="text-xs text-indigo-900 leading-relaxed">
+                  Trigger an automated stale concurrency collision against PostgreSQL 18. Session A advances the record version while Session B submits with a stale version, returning an HTTP 409 Conflict.
+                </p>
+                <button
+                  onClick={handleSimulateConcurrencyConflict}
+                  disabled={simulatingConflict}
+                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50"
+                >
+                  <RefreshCw className={`h-4 w-4 ${simulatingConflict ? 'animate-spin' : ''}`} />
+                  {simulatingConflict ? 'Executing Concurrent Writes...' : 'Simulate Stale Concurrent Collision (HTTP 409)'}
+                </button>
+              </div>
+
+              {concurrencyConflict && (
+                <div className="p-5 bg-rose-50 border border-rose-300 rounded-xl space-y-4">
+                  <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
+                    <AlertTriangle className="h-5 w-5 text-rose-600" />
+                    HTTP 409 Conflict: Concurrent Modification Conflict Detected
+                  </div>
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                    <div className="p-3 bg-white rounded-lg border border-rose-200">
+                      <div className="font-bold text-slate-700">Your Stale Submission:</div>
+                      <div className="text-rose-600 font-mono font-bold mt-1">Version: {concurrencyConflict.staleVersion}</div>
+                      <div className="text-slate-600 font-mono">Attempted Marks: {concurrencyConflict.staleMarks}</div>
+                    </div>
+                    <div className="p-3 bg-white rounded-lg border border-rose-200">
+                      <div className="font-bold text-slate-700">Current Database State:</div>
+                      <div className="text-emerald-600 font-mono font-bold mt-1">Version: {concurrencyConflict.serverVersion}</div>
+                      <div className="text-slate-900 font-mono font-bold">Server Marks: {concurrencyConflict.serverData?.marksObtained}</div>
+                    </div>
+                  </div>
+                  <button
+                    onClick={handleResolveConflictByReloading}
+                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs"
+                  >
+                    Reload &amp; Accept Latest Server State
+                  </button>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: CAMPUS HUB EMBEDDED */}
+        {activeTab === 'campushub' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="EVENTS" embedded={true} />
           </div>
         )}
       </div>

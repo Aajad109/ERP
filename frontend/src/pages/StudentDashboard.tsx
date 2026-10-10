@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { PortalLayout, NavItem } from '../components/PortalLayout';
+import { CampusHub } from './CampusHub';
 import {
   LayoutDashboard,
   User,
@@ -220,11 +221,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   ];
 
   const handleNavSelect = (id: string) => {
-    if (id === 'trending-events' || id === 'lost-found') {
-      onViewChange('CAMPUS_HUB');
-    } else {
-      setActiveTab(id);
-    }
+    setActiveTab(id);
   };
 
   return (
@@ -950,6 +947,257 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <div className="p-4 bg-slate-50 rounded-lg border border-slate-200 space-y-2">
                   <div className="text-slate-500 font-semibold">Batch &amp; Section</div>
                   <div className="text-sm font-bold text-slate-900">{student?.batch?.name || '2024-2028'} • Section {student?.section?.name || 'A'}</div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ATTENDANCE */}
+          {activeTab === 'attendance' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <ClipboardList className="h-5 w-5 text-emerald-600" />
+                      Attendance Analytics &amp; Compliance Status
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Statutory institutional minimum: 75% aggregate attendance required for semester exam gazetting.
+                    </p>
+                  </div>
+                  <div className={`px-4 py-2 rounded-xl text-right font-mono font-black text-lg ${
+                    attendanceData?.overallShortage ? 'bg-rose-50 text-rose-600 border border-rose-200' : 'bg-emerald-50 text-emerald-600 border border-emerald-200'
+                  }`}>
+                    {attendanceData?.overallPercentage}% Overall
+                  </div>
+                </div>
+
+                {attendanceData?.overallShortage && (
+                  <div className="p-4 bg-rose-50 border border-rose-200 rounded-xl text-xs text-rose-900 flex items-start gap-3">
+                    <AlertTriangle className="h-5 w-5 text-rose-600 shrink-0 mt-0.5" />
+                    <div>
+                      <div className="font-bold text-sm">Attendance Shortage Alert (&lt;75%)</div>
+                      <div className="mt-0.5">
+                        Your cumulative attendance is below the mandatory 75% statutory requirement. Please consult with your course faculty for attendance regularization before examination cutoff.
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="space-y-4 pt-2">
+                  <h3 className="text-sm font-bold text-slate-800">Subject-Wise Breakdown</h3>
+                  {attendanceData?.subjectBreakdown?.map((subj: any) => (
+                    <div key={subj.offeringId} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-slate-900 text-sm">
+                          {subj.courseCode} — {subj.courseTitle}
+                        </span>
+                        <span className={`font-mono font-black text-sm ${subj.isShortage ? 'text-rose-600' : 'text-emerald-600'}`}>
+                          {subj.percentage}% ({subj.attendedCount} / {subj.totalSessions} sessions)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-200 rounded-full h-3 overflow-hidden">
+                        <div
+                          className={`h-3 rounded-full transition-all ${
+                            subj.isShortage ? 'bg-rose-500' : 'bg-emerald-500'
+                          }`}
+                          style={{ width: `${Math.min(subj.percentage, 100)}%` }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: EXAMINATION RESULTS */}
+          {activeTab === 'results' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+                  <div>
+                    <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                      <Award className="h-5 w-5 text-indigo-600" />
+                      Official Examination Results &amp; Grade Transcript
+                    </h2>
+                    <p className="text-xs text-slate-500 mt-1">
+                      Results gazetted by Examination Branch. Includes immutable version badges and grievance pathways.
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <span className="text-xs font-bold text-slate-500 uppercase block">Current CGPA</span>
+                    <span className="text-xl font-black text-indigo-700">
+                      {cgpaEvaluation?.cgpaStatus === 'OFFICIAL' ? `${cgpaEvaluation.cgpa} / 10.0` : 'Withheld (Backlogs)'}
+                    </span>
+                  </div>
+                </div>
+
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                        <th className="py-3 px-4">Course</th>
+                        <th className="py-3 px-4">Credits</th>
+                        <th className="py-3 px-4">Internal (/40)</th>
+                        <th className="py-3 px-4">External (/60)</th>
+                        <th className="py-3 px-4">Total (/100)</th>
+                        <th className="py-3 px-4">Grade</th>
+                        <th className="py-3 px-4">Version</th>
+                        <th className="py-3 px-4">Status</th>
+                        <th className="py-3 px-4 text-right">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {results.map((r: any) => (
+                        <tr key={r.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-900">
+                            {r.offering?.course?.code} — {r.offering?.course?.title}
+                          </td>
+                          <td className="py-3 px-4 font-semibold">{r.offering?.course?.credits || 4}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-indigo-600">{r.internalMarks}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-blue-600">{r.externalMarks}</td>
+                          <td className="py-3 px-4 font-mono font-black text-slate-900">{r.totalMarks}</td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded font-black text-[11px] ${
+                              r.grade === 'F' || r.grade === 'AB' ? 'bg-rose-100 text-rose-800' : 'bg-emerald-100 text-emerald-800'
+                            }`}>
+                              {r.grade} ({r.gradePoint} GP)
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                              r.currentVersion > 1 ? 'bg-amber-100 text-amber-800 border border-amber-300' : 'bg-slate-100 text-slate-700'
+                            }`}>
+                              v{r.currentVersion} {r.currentVersion > 1 ? 'Corrected' : 'Initial'}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                              {r.publicationStatus}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-right space-x-1">
+                            <button
+                              onClick={() => setSelectedResult(r)}
+                              className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-bold border border-indigo-200"
+                            >
+                              Grievance
+                            </button>
+                            <button
+                              onClick={() => setSelectedResultForReval(r)}
+                              className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded text-[11px] font-bold border border-amber-200"
+                            >
+                              Revaluation
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: ACADEMIC PERFORMANCE */}
+          {activeTab === 'performance' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl p-6 shadow-sm border border-slate-200 space-y-4">
+                <div className="flex items-center justify-between pb-4 border-b border-slate-100">
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <TrendingUp className="h-5 w-5 text-indigo-600" />
+                    Semester Academic Performance &amp; Credit Trajectory
+                  </h2>
+                </div>
+                <div className="h-80 mt-4">
+                  <ResponsiveContainer width="100%" height="100%">
+                    <BarChart data={performanceChartData.length ? performanceChartData : [{ name: 'CS301', internalMarks: 36, externalMarks: 56, totalMarks: 92 }]}>
+                      <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                      <XAxis dataKey="name" stroke="#64748b" fontSize={12} />
+                      <YAxis stroke="#64748b" fontSize={12} />
+                      <Tooltip />
+                      <Legend wrapperStyle={{ fontSize: 12 }} />
+                      <Bar dataKey="internalMarks" name="Internal Marks (/40)" fill="#6366f1" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="externalMarks" name="External Marks (/60)" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                      <Bar dataKey="totalMarks" name="Grand Total (/100)" fill="#10b981" radius={[4, 4, 0, 0]} />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: CORRECTION REQUESTS */}
+          {activeTab === 'corrections' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                  My Grievance &amp; Correction Requests
+                </h2>
+                <p className="text-xs text-slate-500">
+                  Track student-initiated mark grievance reviews. Requests are routed first to course faculty, then forwarded to Examination Admin for gazetting.
+                </p>
+
+                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                  <div className="font-bold text-slate-800 mb-2">How to submit a correction request:</div>
+                  <p className="text-slate-600 leading-relaxed">
+                    Navigate to <span className="font-semibold text-indigo-600">Examination Results</span> or <span className="font-semibold text-indigo-600">Internal Marks</span>, locate the subject requiring review, and click <span className="font-semibold bg-indigo-100 text-indigo-800 px-1 rounded">Grievance</span> to open the submission modal.
+                  </p>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* TAB: TRENDING EVENTS (CAMPUS HUB) */}
+          {activeTab === 'trending-events' && (
+            <div className="space-y-4">
+              <CampusHub currentUser={currentUser} initialTab="EVENTS" embedded={true} />
+            </div>
+          )}
+
+          {/* TAB: LOST & FOUND (CAMPUS HUB) */}
+          {activeTab === 'lost-found' && (
+            <div className="space-y-4">
+              <CampusHub currentUser={currentUser} initialTab="LOST_FOUND" embedded={true} />
+            </div>
+          )}
+
+          {/* TAB: SETTINGS */}
+          {activeTab === 'settings' && (
+            <div className="space-y-6">
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                  <Settings className="h-5 w-5 text-indigo-600" />
+                  Student Portal Settings &amp; Preferences
+                </h2>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="font-bold text-slate-800">Account Notification Preferences</div>
+                    <label className="flex items-center gap-2 text-slate-600">
+                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-indigo-600" />
+                      Email notifications for published examination results
+                    </label>
+                    <label className="flex items-center gap-2 text-slate-600">
+                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-indigo-600" />
+                      Attendance shortage advisory alerts
+                    </label>
+                  </div>
+                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
+                    <div className="font-bold text-slate-800">Credential Security</div>
+                    <p className="text-slate-500">
+                      Passwords must satisfy institutional standards (minimum 8 characters with alphanumeric and special symbols).
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => alert('Password update form is managed by Academic Admin')}
+                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-semibold text-xs"
+                    >
+                      Request Credential Reset
+                    </button>
+                  </div>
                 </div>
               </div>
             </div>

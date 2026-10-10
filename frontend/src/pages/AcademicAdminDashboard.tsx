@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { PortalLayout, NavItem } from '../components/PortalLayout';
+import { CampusHub } from './CampusHub';
 import {
   LayoutDashboard,
   UserCheck,
@@ -81,6 +82,13 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
     departmentId: '',
     designation: 'Assistant Professor',
   });
+
+  // Department State
+  const [newDepartment, setNewDepartment] = useState({
+    code: '',
+    name: '',
+  });
+  const [submittingDept, setSubmittingDept] = useState<boolean>(false);
 
   // 3. Create Course Form
   const [newCourse, setNewCourse] = useState({
@@ -232,6 +240,26 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
     }
   };
 
+  // Create Department Handler
+  const handleCreateDepartment = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSubmittingDept(true);
+      setFeedback(null);
+      await api.createDepartment(newDepartment);
+      setFeedback({
+        type: 'success',
+        text: `Department ${newDepartment.code.toUpperCase()} (${newDepartment.name}) created successfully! Sections A, B, C, D initialized across all batches.`,
+      });
+      setNewDepartment({ code: '', name: '' });
+      loadAllAcademicData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSubmittingDept(false);
+    }
+  };
+
   // 3. Create Course
   const handleCreateCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -373,11 +401,7 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
   ];
 
   const handleNavSelect = (id: string) => {
-    if (id === 'event-management' || id === 'lost-found-mod') {
-      onViewChange('CAMPUS_HUB');
-    } else {
-      setActiveTab(id);
-    }
+    setActiveTab(id);
   };
 
   return (
@@ -743,6 +767,276 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
           </div>
         )}
 
+        {/* TAB: FACULTY ACCOUNTS */}
+        {activeTab === 'faculty-accounts' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Users className="h-5 w-5 text-indigo-600" />
+                Provision New Faculty Account
+              </h2>
+              <p className="text-xs text-slate-500">
+                Institutional security requirement: Academic Admin provisions official faculty credentials with department affiliation.
+              </p>
+
+              <form onSubmit={handleCreateFaculty} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Employee ID *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFaculty.employeeId}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, employeeId: e.target.value })}
+                    placeholder="e.g. FAC-CSE-003"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-mono font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Faculty Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newFaculty.name}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, name: e.target.value })}
+                    placeholder="e.g. Dr. Claude Shannon"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-bold"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Institutional Email *</label>
+                  <input
+                    type="email"
+                    required
+                    value={newFaculty.email}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, email: e.target.value })}
+                    placeholder="e.g. claude.shannon@college.edu"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Initial Password *</label>
+                  <div className="relative">
+                    <input
+                      type={showPassword ? 'text' : 'password'}
+                      required
+                      value={newFaculty.password}
+                      onChange={(e) => setNewFaculty({ ...newFaculty, password: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 pr-9 focus:ring-2 focus:ring-indigo-500 text-xs font-mono"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-2.5 top-2.5 text-slate-400 hover:text-slate-600"
+                    >
+                      {showPassword ? <EyeOff className="h-4 w-4" /> : <Eye className="h-4 w-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department *</label>
+                  <select
+                    value={newFaculty.departmentId}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, departmentId: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.id}>
+                        {d.code} — {d.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Designation *</label>
+                  <select
+                    value={newFaculty.designation}
+                    onChange={(e) => setNewFaculty({ ...newFaculty, designation: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    <option value="Professor">Professor</option>
+                    <option value="Associate Professor">Associate Professor</option>
+                    <option value="Assistant Professor">Assistant Professor</option>
+                    <option value="Lecturer">Lecturer</option>
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
+                  >
+                    <Users className="h-4 w-4" />
+                    Provision Faculty Account
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Faculty Accounts Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900">Registered Faculty Directory ({facultyList.length})</h3>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="py-3 px-4">Employee ID</th>
+                      <th className="py-3 px-4">Faculty Name</th>
+                      <th className="py-3 px-4">Email</th>
+                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Designation</th>
+                      <th className="py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {facultyList.map((f) => (
+                      <tr key={f.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-mono font-bold text-indigo-700">{f.employeeId}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900">{f.user?.name}</td>
+                        <td className="py-3 px-4 text-slate-600">{f.user?.email}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-800">{f.department?.code}</td>
+                        <td className="py-3 px-4 text-slate-600">{f.designation}</td>
+                        <td className="py-3 px-4">
+                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                            ACTIVE
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: DEPARTMENTS */}
+        {activeTab === 'departments' && (
+          <div className="space-y-6">
+            {/* Create Department Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Building2 className="h-5 w-5 text-indigo-600" />
+                Add New Academic Department
+              </h2>
+              <p className="text-xs text-slate-500">
+                Register authorized academic departments. Standard Sections A, B, C, D will automatically be initialized across all batches.
+              </p>
+
+              <form onSubmit={handleCreateDepartment} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Department Code *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newDepartment.code}
+                    onChange={(e) => setNewDepartment({ ...newDepartment, code: e.target.value.toUpperCase() })}
+                    placeholder="e.g. MECH, AIDS, ECE"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-mono font-bold uppercase"
+                  />
+                  <span className="text-[10px] text-slate-400 mt-0.5 block">Unique 2-10 letter uppercase abbreviation</span>
+                </div>
+
+                <div className="sm:col-span-1 lg:col-span-2">
+                  <label className="block font-bold text-slate-700 mb-1">Department Full Name *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newDepartment.name}
+                    onChange={(e) => setNewDepartment({ ...newDepartment, name: e.target.value })}
+                    placeholder="e.g. Mechanical Engineering"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-bold"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+                  <button
+                    type="submit"
+                    disabled={submittingDept}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    {submittingDept ? 'Creating Department...' : 'Create Department'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Configured Departments List */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900">Configured Academic Departments ({departments.length})</h3>
+                <span className="text-xs text-indigo-600 font-semibold">Institutional Scope Active</span>
+              </div>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                {departments.map((d) => (
+                  <div key={d.id} className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2 hover:border-indigo-300 transition">
+                    <div className="flex justify-between items-start">
+                      <span className="text-xs font-black font-mono bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
+                        {d.code}
+                      </span>
+                      <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.5 rounded">
+                        Active
+                      </span>
+                    </div>
+                    <div className="font-bold text-sm text-slate-900">{d.name}</div>
+                    <div className="text-[11px] text-slate-500 pt-2 border-t border-slate-100 flex justify-between">
+                      <span>Sections:</span>
+                      <span className="font-semibold text-slate-700">A, B, C, D</span>
+                    </div>
+                    {d.examAdminDesignations?.length > 0 && (
+                      <div className="text-[11px] text-slate-500 flex justify-between">
+                        <span>Exam Admin:</span>
+                        <span className="font-semibold text-purple-700">{d.examAdminDesignations[0]?.user?.name || 'Assigned'}</span>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: BATCHES & SECTIONS */}
+        {activeTab === 'batches' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Layers className="h-5 w-5 text-indigo-600" />
+                Configured Batches & Cohort Sections
+              </h2>
+              <p className="text-xs text-slate-500">
+                Institutional batches spanning 4-year engineering curriculum with standard Sections A through D per department.
+              </p>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                {batches.map((b) => (
+                  <div key={b.id} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
+                    <div className="flex justify-between items-center border-b border-slate-200 pb-2">
+                      <span className="text-base font-black text-slate-900">{b.name}</span>
+                      <span className="text-xs font-mono text-indigo-600 font-bold">{b.startYear} – {b.endYear}</span>
+                    </div>
+                    <div className="text-xs font-bold text-slate-600">Configured Sections:</div>
+                    <div className="grid grid-cols-2 gap-2 text-xs">
+                      {['Section A', 'Section B', 'Section C', 'Section D'].map((sec) => (
+                        <div key={sec} className="p-2 bg-white rounded border border-slate-200 text-center font-semibold text-slate-700">
+                          {sec}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {/* TAB: COURSES */}
         {activeTab === 'courses' && (
           <div className="space-y-6">
@@ -872,6 +1166,216 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
           </div>
         )}
 
+        {/* TAB: COURSE OFFERINGS */}
+        {activeTab === 'offerings' && (
+          <div className="space-y-6">
+            {/* Create Offering Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <GraduationCap className="h-5 w-5 text-indigo-600" />
+                Initialize Course Offering
+              </h2>
+              <p className="text-xs text-slate-500">
+                Instantiate a course offering for an academic year, batch, and section with internal/external assessment components.
+              </p>
+
+              <form onSubmit={handleCreateOffering} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Course *</label>
+                  <select
+                    value={newOffering.courseId}
+                    onChange={(e) => setNewOffering({ ...newOffering, courseId: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {courses.map((c) => (
+                      <option key={c.id} value={c.id}>
+                        {c.code} — {c.title} ({c.department?.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Batch *</label>
+                  <select
+                    value={newOffering.batchId}
+                    onChange={(e) => {
+                      const b = batches.find((x) => x.id === e.target.value);
+                      setNewOffering({
+                        ...newOffering,
+                        batchId: e.target.value,
+                        sectionId: b?.sections?.[0]?.id || '',
+                      });
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        {b.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Section *</label>
+                  <select
+                    value={newOffering.sectionId}
+                    onChange={(e) => setNewOffering({ ...newOffering, sectionId: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {batches
+                      .find((b) => b.id === newOffering.batchId)
+                      ?.sections?.map((s: any) => (
+                        <option key={s.id} value={s.id}>
+                          Section {s.name}
+                        </option>
+                      )) || (
+                      <option value="">Select Section</option>
+                    )}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Semester *</label>
+                  <select
+                    value={newOffering.semester}
+                    onChange={(e) => setNewOffering({ ...newOffering, semester: Number(e.target.value) })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {[1, 2, 3, 4, 5, 6, 7, 8].map((sem) => (
+                      <option key={sem} value={sem}>
+                        Semester {sem}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Academic Year *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newOffering.academicYear}
+                    onChange={(e) => setNewOffering({ ...newOffering, academicYear: e.target.value })}
+                    placeholder="2024-2025"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-3 flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Initialize Offering
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Offerings Table */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-900">Active Course Offerings ({offerings.length})</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="py-3 px-4">Course</th>
+                      <th className="py-3 px-4">Department</th>
+                      <th className="py-3 px-4">Batch</th>
+                      <th className="py-3 px-4">Section</th>
+                      <th className="py-3 px-4">Semester</th>
+                      <th className="py-3 px-4">Assigned Faculty</th>
+                      <th className="py-3 px-4">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {offerings.map((o) => (
+                      <tr key={o.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-bold text-indigo-700">{o.course?.code} — {o.course?.title}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-800">{o.course?.department?.code}</td>
+                        <td className="py-3 px-4 text-slate-600">{o.batch?.name}</td>
+                        <td className="py-3 px-4 font-bold">Sec {o.section?.name}</td>
+                        <td className="py-3 px-4 font-mono">Sem {o.semester}</td>
+                        <td className="py-3 px-4 text-slate-800">
+                          {o.teachingAssignments?.[0]?.faculty?.name || (
+                            <span className="text-amber-600 italic">Unassigned</span>
+                          )}
+                        </td>
+                        <td className="py-3 px-4">
+                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
+                            OFFERED
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: STUDENT ENROLLMENT */}
+        {activeTab === 'enrollment' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <UserCheck className="h-5 w-5 text-indigo-600" />
+                Enroll Student into Course Offering
+              </h2>
+              <p className="text-xs text-slate-500">
+                Enroll student into designated offering. Automatically initializes individual assessment marks matrix.
+              </p>
+
+              <form onSubmit={handleEnrollStudent} className="grid grid-cols-1 sm:grid-cols-2 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Target Course Offering *</label>
+                  <select
+                    value={enrollOfferingId}
+                    onChange={(e) => setEnrollOfferingId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {offerings.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.course?.code} — {o.course?.title} ({o.batch?.name} Sec {o.section?.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Eligible Student *</label>
+                  <select
+                    value={enrollStudentId}
+                    onChange={(e) => setEnrollStudentId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    <option value="">Select Student to Enroll</option>
+                    {students.map((s) => (
+                      <option key={s.id} value={s.id}>
+                        {s.rollNumber} — {s.user?.name} ({s.department?.code})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="sm:col-span-2 flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
+                  >
+                    <UserCheck className="h-4 w-4" />
+                    Enroll Student
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        )}
+
         {/* TAB: FACULTY ASSIGNMENTS & REASSIGNMENT (SCENARIO D) */}
         {activeTab === 'assignments' && (
           <div className="space-y-6">
@@ -990,6 +1494,131 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                     </tbody>
                   </table>
                 </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: OFFICIAL TIMETABLE */}
+        {activeTab === 'timetable' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <Calendar className="h-5 w-5 text-indigo-600" />
+                Schedule Official Timetable Slot
+              </h2>
+              <p className="text-xs text-slate-500">
+                Allocate room and time slots for course offerings. Automated collision detection prevents room double-booking.
+              </p>
+
+              <form onSubmit={handleCreateTimetableSlot} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Course Offering *</label>
+                  <select
+                    value={newSlot.offeringId}
+                    onChange={(e) => setNewSlot({ ...newSlot, offeringId: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  >
+                    {offerings.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        {o.course?.code} ({o.batch?.name} Sec {o.section?.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Day of Week *</label>
+                  <select
+                    value={newSlot.dayOfWeek}
+                    onChange={(e) => setNewSlot({ ...newSlot, dayOfWeek: e.target.value as any })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-bold"
+                  >
+                    <option value="MON">Monday</option>
+                    <option value="TUE">Tuesday</option>
+                    <option value="WED">Wednesday</option>
+                    <option value="THU">Thursday</option>
+                    <option value="FRI">Friday</option>
+                    <option value="SAT">Saturday</option>
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Start Time *</label>
+                  <input
+                    type="time"
+                    required
+                    value={newSlot.startTime}
+                    onChange={(e) => setNewSlot({ ...newSlot, startTime: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">End Time *</label>
+                  <input
+                    type="time"
+                    required
+                    value={newSlot.endTime}
+                    onChange={(e) => setNewSlot({ ...newSlot, endTime: e.target.value })}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Room Number *</label>
+                  <input
+                    type="text"
+                    required
+                    value={newSlot.roomNumber}
+                    onChange={(e) => setNewSlot({ ...newSlot, roomNumber: e.target.value })}
+                    placeholder="LH-101"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-bold"
+                  />
+                </div>
+
+                <div className="sm:col-span-2 lg:col-span-5 flex justify-end">
+                  <button
+                    type="submit"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
+                  >
+                    <PlusCircle className="h-4 w-4" />
+                    Allocate Timetable Slot
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Scheduled Slots Matrix */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-900">Institutional Weekly Timetable Matrix</h3>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left text-xs border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                      <th className="py-3 px-4">Day</th>
+                      <th className="py-3 px-4">Time Window</th>
+                      <th className="py-3 px-4">Room</th>
+                      <th className="py-3 px-4">Course Code & Title</th>
+                      <th className="py-3 px-4">Section</th>
+                      <th className="py-3 px-4">Assigned Instructor</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-100">
+                    {timetableSlots.map((s) => (
+                      <tr key={s.id} className="hover:bg-slate-50">
+                        <td className="py-3 px-4 font-bold text-indigo-700">{s.dayOfWeek}</td>
+                        <td className="py-3 px-4 font-mono font-bold text-slate-800">{s.startTime} – {s.endTime}</td>
+                        <td className="py-3 px-4 font-bold text-slate-900 bg-slate-50/50">{s.roomNumber}</td>
+                        <td className="py-3 px-4 font-semibold text-slate-900">{s.offering?.course?.code} — {s.offering?.course?.title}</td>
+                        <td className="py-3 px-4 text-slate-600">Sec {s.offering?.section?.name}</td>
+                        <td className="py-3 px-4 text-slate-700">
+                          {s.offering?.teachingAssignments?.[0]?.faculty?.name || 'Dr. Alan Turing'}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
               </div>
             </div>
           </div>
@@ -1160,6 +1789,50 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                 </div>
               </form>
             </div>
+          </div>
+        )}
+
+        {/* TAB: REPORTS */}
+        {activeTab === 'reports' && (
+          <div className="space-y-6">
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                <FileText className="h-5 w-5 text-indigo-600" />
+                Institutional Academic Reports & Compliance KPIs
+              </h2>
+              <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-2">
+                <div className="p-4 bg-indigo-50 border border-indigo-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-indigo-600">Total Enrollment</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{reportsData?.kpis?.totalStudents || students.length}</div>
+                </div>
+                <div className="p-4 bg-emerald-50 border border-emerald-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-emerald-600">Teaching Faculty</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{reportsData?.kpis?.totalFaculty || facultyList.length}</div>
+                </div>
+                <div className="p-4 bg-purple-50 border border-purple-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-purple-600">Academic Programs</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{departments.length} Departments</div>
+                </div>
+                <div className="p-4 bg-amber-50 border border-amber-100 rounded-xl">
+                  <div className="text-xs uppercase font-bold text-amber-600">Active Offerings</div>
+                  <div className="text-2xl font-black text-slate-900 mt-1">{offerings.length} Courses</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* TAB: EVENT MANAGEMENT (CAMPUS HUB) */}
+        {activeTab === 'event-management' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="EVENTS" embedded={true} />
+          </div>
+        )}
+
+        {/* TAB: LOST & FOUND MODERATION (CAMPUS HUB) */}
+        {activeTab === 'lost-found-mod' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="LOST_FOUND" embedded={true} />
           </div>
         )}
       </div>

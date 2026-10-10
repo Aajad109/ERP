@@ -22,10 +22,18 @@ import {
 
 interface CampusHubProps {
   currentUser: any;
+  initialTab?: 'EVENTS' | 'LOST_FOUND';
+  embedded?: boolean;
 }
 
-export const CampusHub: React.FC<CampusHubProps> = ({ currentUser }) => {
-  const [activeTab, setActiveTab] = useState<'EVENTS' | 'LOST_FOUND'>('EVENTS');
+export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 'EVENTS', embedded = false }) => {
+  const [activeTab, setActiveTab] = useState<'EVENTS' | 'LOST_FOUND'>(initialTab);
+
+  useEffect(() => {
+    if (initialTab) {
+      setActiveTab(initialTab);
+    }
+  }, [initialTab]);
 
   // --------------------------------------------------------------------------
   // EVENTS STATE
