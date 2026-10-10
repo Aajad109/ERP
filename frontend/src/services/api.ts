@@ -81,6 +81,21 @@ export const api = {
       method: 'POST',
       body: JSON.stringify(data),
     }),
+  toggleUserStatus: (userId: string, isActive: boolean, reason?: string) =>
+    request<any>(`/academic/users/${userId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive, reason }),
+    }),
+  toggleStudentStatus: (studentProfileId: string, isActive: boolean, reason?: string) =>
+    request<any>(`/academic/students/${studentProfileId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive, reason }),
+    }),
+  toggleFacultyStatus: (facultyProfileId: string, isActive: boolean, reason?: string) =>
+    request<any>(`/academic/faculty/${facultyProfileId}/status`, {
+      method: 'PUT',
+      body: JSON.stringify({ isActive, reason }),
+    }),
   enrollStudent: (offeringId: string, studentId: string) =>
     request<any>('/academic/enrollments', {
       method: 'POST',

@@ -26,7 +26,8 @@ import {
   EyeOff,
   Send,
   RotateCcw,
-  AlertTriangle
+  AlertTriangle,
+  UserX
 } from 'lucide-react';
 
 interface AcademicAdminDashboardProps {
@@ -143,6 +144,13 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
     targetRole: 'ALL',
   });
 
+  // Account Status Filtering & Toggling State
+  const [studentFilterStatus, setStudentFilterStatus] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED'>('ALL');
+  const [studentSearch, setStudentSearch] = useState<string>('');
+  const [facultyFilterStatus, setFacultyFilterStatus] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED'>('ALL');
+  const [facultySearch, setFacultySearch] = useState<string>('');
+  const [togglingUserId, setTogglingUserId] = useState<string | null>(null);
+
   useEffect(() => {
     loadAllAcademicData();
   }, [currentUser]);
@@ -237,6 +245,58 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
       loadAllAcademicData();
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.data?.message || err.message });
+    }
+  };
+
+  // Toggle Student Account Status (Active / Deactivated)
+  const handleToggleStudentStatus = async (student: any) => {
+    const currentActive = student.user?.isActive !== false;
+    const newActive = !currentActive;
+    const confirmText = newActive
+      ? `Reactivate account for student ${student.user?.name} (${student.rollNumber})?\n\nThis will restore their student portal login access and permissions.`
+      : `DEACTIVATE student account for ${student.user?.name} (${student.rollNumber})?\n\nThis will immediately revoke their portal access, terminate active sessions, and prevent new logins.`;
+
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      setTogglingUserId(student.id);
+      setFeedback(null);
+      const res = await api.toggleStudentStatus(student.id, newActive);
+      setFeedback({
+        type: 'success',
+        text: res.message || `Student ${student.user?.name} status updated to ${newActive ? 'Active' : 'Deactivated'}.`,
+      });
+      loadAllAcademicData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setTogglingUserId(null);
+    }
+  };
+
+  // Toggle Faculty Account Status (Active / Deactivated)
+  const handleToggleFacultyStatus = async (faculty: any) => {
+    const currentActive = faculty.user?.isActive !== false;
+    const newActive = !currentActive;
+    const confirmText = newActive
+      ? `Reactivate account for faculty member ${faculty.user?.name} (${faculty.employeeId})?\n\nThis will restore their faculty portal login and teaching permissions.`
+      : `DEACTIVATE faculty account for ${faculty.user?.name} (${faculty.employeeId})?\n\nThis will immediately revoke portal access and terminate any active course teaching assignments.`;
+
+    if (!window.confirm(confirmText)) return;
+
+    try {
+      setTogglingUserId(faculty.id);
+      setFeedback(null);
+      const res = await api.toggleFacultyStatus(faculty.id, newActive);
+      setFeedback({
+        type: 'success',
+        text: res.message || `Faculty ${faculty.user?.name} status updated to ${newActive ? 'Active' : 'Deactivated'}.`,
+      });
+      loadAllAcademicData();
+    } catch (err: any) {
+      setFeedback({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setTogglingUserId(null);
     }
   };
 
@@ -379,6 +439,42 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
       setFeedback({ type: 'error', text: err.data?.message || err.message });
     }
   };
+
+  const filteredStudents = students.filter((s) => {
+    const isActive = s.user?.isActive !== false;
+    if (studentFilterStatus === 'ACTIVE' && !isActive) return false;
+    if (studentFilterStatus === 'DEACTIVATED' && isActive) return false;
+    if (studentSearch.trim()) {
+      const q = studentSearch.toLowerCase();
+      const matchRoll = s.rollNumber?.toLowerCase().includes(q);
+      const matchName = s.user?.name?.toLowerCase().includes(q);
+      const matchEmail = s.user?.email?.toLowerCase().includes(q);
+      const matchDept = s.department?.code?.toLowerCase().includes(q);
+      return matchRoll || matchName || matchEmail || matchDept;
+    }
+    return true;
+  });
+
+  const studentActiveCount = students.filter((s) => s.user?.isActive !== false).length;
+  const studentDeactivatedCount = students.length - studentActiveCount;
+
+  const filteredFaculty = facultyList.filter((f) => {
+    const isActive = f.user?.isActive !== false;
+    if (facultyFilterStatus === 'ACTIVE' && !isActive) return false;
+    if (facultyFilterStatus === 'DEACTIVATED' && isActive) return false;
+    if (facultySearch.trim()) {
+      const q = facultySearch.toLowerCase();
+      const matchEmp = f.employeeId?.toLowerCase().includes(q);
+      const matchName = f.user?.name?.toLowerCase().includes(q);
+      const matchEmail = f.user?.email?.toLowerCase().includes(q);
+      const matchDept = f.department?.code?.toLowerCase().includes(q);
+      return matchEmp || matchName || matchEmail || matchDept;
+    }
+    return true;
+  });
+
+  const facultyActiveCount = facultyList.filter((f) => f.user?.isActive !== false).length;
+  const facultyDeactivatedCount = facultyList.length - facultyActiveCount;
 
   // Sidebar Items strictly matching prompt Section 8
   const navItems: NavItem[] = [
@@ -728,7 +824,52 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
 
             {/* Students Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h3 className="text-sm font-bold text-slate-900">Enrolled Student Accounts Roster</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Enrolled Student Accounts Roster</h3>
+                  <p className="text-xs text-slate-500">
+                    Total: {students.length} students &bull; Active: {studentActiveCount} &bull; Deactivated: {studentDeactivatedCount}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex p-1 bg-slate-100 rounded-lg text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setStudentFilterStatus('ALL')}
+                      className={`px-3 py-1 rounded-md transition ${studentFilterStatus === 'ALL' ? 'bg-white text-purple-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      All ({students.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentFilterStatus('ACTIVE')}
+                      className={`px-3 py-1 rounded-md transition ${studentFilterStatus === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Active ({studentActiveCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setStudentFilterStatus('DEACTIVATED')}
+                      className={`px-3 py-1 rounded-md transition ${studentFilterStatus === 'DEACTIVATED' ? 'bg-white text-rose-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Deactivated ({studentDeactivatedCount})
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search students..."
+                      value={studentSearch}
+                      onChange={(e) => setStudentSearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 focus:ring-2 focus:ring-purple-500"
+                    />
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  </div>
+                </div>
+              </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -741,25 +882,75 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                       <th className="py-3 px-4">Section</th>
                       <th className="py-3 px-4">Semester</th>
                       <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {students.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-mono font-bold text-purple-700">{s.rollNumber}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{s.user.name}</td>
-                        <td className="py-3 px-4 text-slate-600">{s.user.email}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-800">{s.department?.code}</td>
-                        <td className="py-3 px-4 text-slate-600">{s.batch?.name}</td>
-                        <td className="py-3 px-4 font-bold">{s.section?.name}</td>
-                        <td className="py-3 px-4 font-mono">Sem {s.currentSemester || 5}</td>
-                        <td className="py-3 px-4">
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                            ACTIVE
-                          </span>
+                    {filteredStudents.length === 0 ? (
+                      <tr>
+                        <td colSpan={9} className="py-8 text-center text-slate-400 text-xs font-semibold">
+                          No student accounts found matching selected criteria.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredStudents.map((s) => {
+                        const isActive = s.user?.isActive !== false;
+                        const isToggling = togglingUserId === s.id;
+
+                        return (
+                          <tr key={s.id} className={`hover:bg-slate-50 transition ${!isActive ? 'bg-rose-50/20' : ''}`}>
+                            <td className="py-3 px-4 font-mono font-bold text-purple-700">{s.rollNumber}</td>
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              {s.user.name}
+                              {!isActive && <span className="ml-1.5 text-[10px] text-rose-600 font-normal">(Deactivated)</span>}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">{s.user.email}</td>
+                            <td className="py-3 px-4 font-semibold text-slate-800">{s.department?.code}</td>
+                            <td className="py-3 px-4 text-slate-600">{s.batch?.name}</td>
+                            <td className="py-3 px-4 font-bold">{s.section?.name}</td>
+                            <td className="py-3 px-4 font-mono">Sem {s.currentSemester || 1}</td>
+                            <td className="py-3 px-4">
+                              {isActive ? (
+                                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                  ACTIVE
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                                  DEACTIVATED
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {isActive ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStudentStatus(s)}
+                                  disabled={isToggling}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50"
+                                  title="Deactivate student account (revoke portal access)"
+                                >
+                                  <UserX className="h-3 w-3" />
+                                  {isToggling ? 'Updating...' : 'Deactivate'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleStudentStatus(s)}
+                                  disabled={isToggling}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition disabled:opacity-50"
+                                  title="Reactivate student account"
+                                >
+                                  <UserCheck className="h-3 w-3" />
+                                  {isToggling ? 'Updating...' : 'Reactivate'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -879,9 +1070,52 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
 
             {/* Faculty Accounts Table */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <div className="flex justify-between items-center">
-                <h3 className="text-base font-bold text-slate-900">Registered Faculty Directory ({facultyList.length})</h3>
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-2 border-b border-slate-100">
+                <div>
+                  <h3 className="text-base font-bold text-slate-900">Registered Faculty Directory</h3>
+                  <p className="text-xs text-slate-500">
+                    Total: {facultyList.length} faculty &bull; Active: {facultyActiveCount} &bull; Deactivated: {facultyDeactivatedCount}
+                  </p>
+                </div>
+
+                <div className="flex flex-wrap items-center gap-2">
+                  <div className="inline-flex p-1 bg-slate-100 rounded-lg text-xs font-semibold">
+                    <button
+                      type="button"
+                      onClick={() => setFacultyFilterStatus('ALL')}
+                      className={`px-3 py-1 rounded-md transition ${facultyFilterStatus === 'ALL' ? 'bg-white text-indigo-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      All ({facultyList.length})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFacultyFilterStatus('ACTIVE')}
+                      className={`px-3 py-1 rounded-md transition ${facultyFilterStatus === 'ACTIVE' ? 'bg-white text-emerald-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Active ({facultyActiveCount})
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setFacultyFilterStatus('DEACTIVATED')}
+                      className={`px-3 py-1 rounded-md transition ${facultyFilterStatus === 'DEACTIVATED' ? 'bg-white text-rose-700 shadow-sm font-bold' : 'text-slate-600 hover:text-slate-900'}`}
+                    >
+                      Deactivated ({facultyDeactivatedCount})
+                    </button>
+                  </div>
+
+                  <div className="relative">
+                    <input
+                      type="text"
+                      placeholder="Search faculty..."
+                      value={facultySearch}
+                      onChange={(e) => setFacultySearch(e.target.value)}
+                      className="pl-8 pr-3 py-1.5 border border-slate-300 rounded-lg text-xs w-48 focus:ring-2 focus:ring-indigo-500"
+                    />
+                    <Search className="h-3.5 w-3.5 text-slate-400 absolute left-2.5 top-2.5" />
+                  </div>
+                </div>
               </div>
+
               <div className="overflow-x-auto">
                 <table className="w-full text-left text-xs border-collapse">
                   <thead>
@@ -892,23 +1126,73 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                       <th className="py-3 px-4">Department</th>
                       <th className="py-3 px-4">Designation</th>
                       <th className="py-3 px-4">Status</th>
+                      <th className="py-3 px-4 text-right">Actions</th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-slate-100">
-                    {facultyList.map((f) => (
-                      <tr key={f.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-mono font-bold text-indigo-700">{f.employeeId}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{f.user?.name}</td>
-                        <td className="py-3 px-4 text-slate-600">{f.user?.email}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-800">{f.department?.code}</td>
-                        <td className="py-3 px-4 text-slate-600">{f.designation}</td>
-                        <td className="py-3 px-4">
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                            ACTIVE
-                          </span>
+                    {filteredFaculty.length === 0 ? (
+                      <tr>
+                        <td colSpan={7} className="py-8 text-center text-slate-400 text-xs font-semibold">
+                          No faculty accounts found matching selected criteria.
                         </td>
                       </tr>
-                    ))}
+                    ) : (
+                      filteredFaculty.map((f) => {
+                        const isActive = f.user?.isActive !== false;
+                        const isToggling = togglingUserId === f.id;
+
+                        return (
+                          <tr key={f.id} className={`hover:bg-slate-50 transition ${!isActive ? 'bg-rose-50/20' : ''}`}>
+                            <td className="py-3 px-4 font-mono font-bold text-indigo-700">{f.employeeId}</td>
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              {f.user?.name}
+                              {!isActive && <span className="ml-1.5 text-[10px] text-rose-600 font-normal">(Deactivated)</span>}
+                            </td>
+                            <td className="py-3 px-4 text-slate-600">{f.user?.email}</td>
+                            <td className="py-3 px-4 font-semibold text-slate-800">{f.department?.code}</td>
+                            <td className="py-3 px-4 text-slate-600">{f.designation}</td>
+                            <td className="py-3 px-4">
+                              {isActive ? (
+                                <span className="inline-flex items-center gap-1.5 bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-emerald-500"></span>
+                                  ACTIVE
+                                </span>
+                              ) : (
+                                <span className="inline-flex items-center gap-1.5 bg-rose-50 text-rose-700 border border-rose-200 px-2 py-0.5 rounded-full text-[10px] font-bold">
+                                  <span className="h-1.5 w-1.5 rounded-full bg-rose-500"></span>
+                                  DEACTIVATED
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              {isActive ? (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFacultyStatus(f)}
+                                  disabled={isToggling}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-rose-700 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg transition disabled:opacity-50"
+                                  title="Deactivate faculty account (revoke portal access and teaching assignments)"
+                                >
+                                  <UserX className="h-3 w-3" />
+                                  {isToggling ? 'Updating...' : 'Deactivate'}
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  onClick={() => handleToggleFacultyStatus(f)}
+                                  disabled={isToggling}
+                                  className="inline-flex items-center gap-1 px-2.5 py-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 hover:bg-emerald-100 border border-emerald-200 rounded-lg transition disabled:opacity-50"
+                                  title="Reactivate faculty account"
+                                >
+                                  <UserCheck className="h-3 w-3" />
+                                  {isToggling ? 'Updating...' : 'Reactivate'}
+                                </button>
+                              )}
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
                   </tbody>
                 </table>
               </div>
@@ -1354,11 +1638,14 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                     className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
                   >
                     <option value="">Select Student to Enroll</option>
-                    {students.map((s) => (
-                      <option key={s.id} value={s.id}>
-                        {s.rollNumber} — {s.user?.name} ({s.department?.code})
-                      </option>
-                    ))}
+                    {students.map((s) => {
+                      const isActive = s.user?.isActive !== false;
+                      return (
+                        <option key={s.id} value={s.id} disabled={!isActive}>
+                          {s.rollNumber} — {s.user?.name} ({s.department?.code}) {!isActive ? '⛔ [DEACTIVATED - Ineligible]' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 
@@ -1418,11 +1705,14 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                     onChange={(e) => setReassignFacultyId(e.target.value)}
                     className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-purple-500 text-xs font-semibold"
                   >
-                    {facultyList.map((f) => (
-                      <option key={f.user.id} value={f.user.id}>
-                        {f.user.name} ({f.employeeId} • {f.department?.code})
-                      </option>
-                    ))}
+                    {facultyList.map((f) => {
+                      const isActive = f.user?.isActive !== false;
+                      return (
+                        <option key={f.user.id} value={f.user.id} disabled={!isActive}>
+                          {f.user.name} ({f.employeeId} • {f.department?.code}) {!isActive ? '⛔ [DEACTIVATED - Ineligible]' : ''}
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
 

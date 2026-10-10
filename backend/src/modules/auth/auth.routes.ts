@@ -101,13 +101,20 @@ authRouter.post('/login', async (req: Request, res: Response) => {
       }
     }
 
-    if (!user || !user.isActive) {
+    if (!user) {
       return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid credentials. Please verify your roll number, email, and password.' });
     }
 
     const isMatch = await bcrypt.compare(password, user.passwordHash);
     if (!isMatch) {
       return res.status(401).json({ error: 'INVALID_CREDENTIALS', message: 'Invalid email or password' });
+    }
+
+    if (!user.isActive) {
+      return res.status(403).json({
+        error: 'ACCOUNT_DEACTIVATED',
+        message: 'Your institutional account has been deactivated. Please contact the Academic Administration.',
+      });
     }
 
     const token = jwt.sign({ userId: user.id }, config.jwtSecret, { expiresIn: '8h' });

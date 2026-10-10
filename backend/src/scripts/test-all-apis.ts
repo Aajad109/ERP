@@ -141,7 +141,13 @@ async function runApiAudit() {
   await checkEndpoint('Faculty Get Announcements', 'GET', '/api/academic/announcements', facultyToken, null, 200);
 
   const offerings = facultyOfferingsRes.res?.body?.offerings || [];
-  const activeOffering = offerings[0];
+  const facultyUser = facultyLoginRes.res?.body?.user;
+  const activeOffering =
+    offerings.find((o: any) =>
+      o.teachingAssignments?.some(
+        (ta: any) => (ta.faculty?.id === facultyUser?.id || ta.facultyId === facultyUser?.id) && ta.isActive
+      )
+    ) || offerings[0];
   let markRecord: any = null;
 
   if (activeOffering) {
@@ -330,6 +336,132 @@ async function runApiAudit() {
       201
     );
     const createdFaculty = newFacultyRes.res?.body?.faculty;
+
+    // Deactivation & Reactivation Verification Suite
+    if (createdStudent && createdFaculty) {
+      // 1. Deactivate student
+      await checkEndpoint(
+        `Admin Deactivate Student (${createdStudent.rollNumber})`,
+        'PUT',
+        `/api/academic/students/${createdStudent.id}/status`,
+        adminToken,
+        { isActive: false, reason: 'Temporary disciplinary administrative suspension' },
+        200
+      );
+
+      // 2. Verify deactivated student login is blocked with 403 ACCOUNT_DEACTIVATED
+      await checkEndpoint(
+        `Blocked Login Attempt for Deactivated Student (${createdStudent.rollNumber})`,
+        'POST',
+        '/api/auth/login',
+        null,
+        { identifier: createdStudent.rollNumber, password: 'Password@123' },
+        403
+      );
+
+      // 3. Verify enrolling deactivated student is blocked with 400
+      if (activeOffering) {
+        await checkEndpoint(
+          'Blocked Enrollment Attempt for Deactivated Student',
+          'POST',
+          '/api/academic/enrollments',
+          adminToken,
+          { offeringId: activeOffering.id, studentId: createdStudent.id },
+          400
+        );
+      }
+
+      // 4. Reactivate student
+      await checkEndpoint(
+        `Admin Reactivate Student (${createdStudent.rollNumber})`,
+        'PUT',
+        `/api/academic/students/${createdStudent.id}/status`,
+        adminToken,
+        { isActive: true, reason: 'Suspension completed, restored active status' },
+        200
+      );
+
+      // 5. Verify reactivated student login succeeds
+      await checkEndpoint(
+        `Login for Reactivated Student (${createdStudent.rollNumber})`,
+        'POST',
+        '/api/auth/login',
+        null,
+        { identifier: createdStudent.rollNumber, password: 'Password@123' },
+        200
+      );
+
+      // 6. Deactivate faculty
+      await checkEndpoint(
+        `Admin Deactivate Faculty (${createdFaculty.employeeId})`,
+        'PUT',
+        `/api/academic/faculty/${createdFaculty.id}/status`,
+        adminToken,
+        { isActive: false, reason: 'Faculty unpaid leave of absence' },
+        200
+      );
+
+      // 7. Verify deactivated faculty login is blocked with 403
+      await checkEndpoint(
+        `Blocked Login Attempt for Deactivated Faculty (${createdFaculty.employeeId})`,
+        'POST',
+        '/api/auth/login',
+        null,
+        { identifier: createdFaculty.employeeId, password: 'Password@123' },
+        403
+      );
+
+      // 8. Verify assigning deactivated faculty is blocked with 400
+      if (activeOffering) {
+        await checkEndpoint(
+          'Blocked Assignment Attempt for Deactivated Faculty',
+          'POST',
+          '/api/academic/assignments',
+          adminToken,
+          {
+            offeringId: activeOffering.id,
+            newFacultyId: createdFaculty.userId,
+            effectiveDate: new Date().toISOString(),
+            reason: 'Invalid assignment test',
+          },
+          400
+        );
+      }
+
+      // 9. Reactivate faculty
+      await checkEndpoint(
+        `Admin Reactivate Faculty (${createdFaculty.employeeId})`,
+        'PUT',
+        `/api/academic/faculty/${createdFaculty.id}/status`,
+        adminToken,
+        { isActive: true, reason: 'Returned from leave of absence' },
+        200
+      );
+
+      // 10. Verify reactivated faculty login succeeds
+      await checkEndpoint(
+        `Login for Reactivated Faculty (${createdFaculty.employeeId})`,
+        'POST',
+        '/api/auth/login',
+        null,
+        { identifier: createdFaculty.employeeId, password: 'Password@123' },
+        200
+      );
+
+      // 11. Self-deactivation prevention for Academic Admin
+      const adminMeRes = await request(app).get('/api/auth/me').set('Authorization', `Bearer ${adminToken}`);
+      const adminUserId = adminMeRes.body?.user?.id;
+      if (adminUserId) {
+        await checkEndpoint(
+          'Prevent Academic Admin Self-Deactivation',
+          'PUT',
+          `/api/academic/users/${adminUserId}/status`,
+          adminToken,
+          { isActive: false },
+          400
+        );
+      }
+    }
 
     // Admin Create Course Offering
     if (createdCourse) {

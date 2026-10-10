@@ -168,12 +168,18 @@ academicRouter.post(
         return res.status(404).json({ error: 'NOT_FOUND', message: 'Course offering not found' });
       }
 
-      // Verify new faculty exists and has FACULTY role
+      // Verify new faculty exists and has active FACULTY role
       const newFaculty = await prisma.user.findUnique({
         where: { id: newFacultyId },
       });
       if (!newFaculty || newFaculty.role !== 'FACULTY') {
         return res.status(400).json({ error: 'INVALID_FACULTY', message: 'Target user is not a valid faculty member' });
+      }
+      if (!newFaculty.isActive) {
+        return res.status(400).json({
+          error: 'FACULTY_ACCOUNT_DEACTIVATED',
+          message: 'Cannot assign a deactivated faculty member to a course offering.',
+        });
       }
 
       // Execute reassignment transaction
@@ -579,6 +585,225 @@ academicRouter.post(
 );
 
 // ============================================================================
+// ACCOUNT DEACTIVATION / REACTIVATION (STUDENTS & FACULTY)
+// ============================================================================
+
+const toggleUserStatusSchema = z.object({
+  isActive: z.boolean(),
+  reason: z.string().optional(),
+});
+
+academicRouter.put(
+  '/users/:userId/status',
+  authenticateToken,
+  requireRole('ACADEMIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const { userId } = req.params;
+      const parseResult = toggleUserStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+      }
+
+      if (req.user!.id === userId) {
+        return res.status(400).json({
+          error: 'SELF_DEACTIVATION_PREVENTED',
+          message: 'Academic Administrators cannot deactivate their own administrative account.',
+        });
+      }
+
+      const user = await prisma.user.findUnique({
+        where: { id: userId },
+        include: { studentProfile: true, facultyProfile: true },
+      });
+
+      if (!user) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'User not found' });
+      }
+
+      const { isActive, reason } = parseResult.data;
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({
+          where: { id: userId },
+          data: { isActive },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            isActive: true,
+            departmentId: true,
+          },
+        });
+
+        // If faculty is deactivated, mark active teaching assignments as terminated
+        if (!isActive && user.role === 'FACULTY') {
+          await tx.teachingAssignment.updateMany({
+            where: { facultyId: userId, isActive: true },
+            data: {
+              isActive: false,
+              endDate: new Date(),
+            },
+          });
+        }
+
+        return u;
+      });
+
+      await logAuditEvent({
+        actorUserId: req.user!.id,
+        actorRole: req.user!.role,
+        action: isActive ? 'USER_ACCOUNT_REACTIVATED' : 'USER_ACCOUNT_DEACTIVATED',
+        entityType: 'User',
+        entityId: userId,
+        departmentId: user.departmentId,
+        reason: reason || (isActive ? 'Reactivated by Academic Administration' : 'Deactivated by Academic Administration'),
+        oldData: { isActive: user.isActive },
+        newData: { isActive, reason },
+        req,
+      });
+
+      return res.json({
+        message: `Account for ${updatedUser.name} (${updatedUser.role}) has been ${isActive ? 'reactivated' : 'deactivated'} successfully.`,
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      console.error('Toggle status error:', err);
+      return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+    }
+  }
+);
+
+academicRouter.put(
+  '/students/:studentProfileId/status',
+  authenticateToken,
+  requireRole('ACADEMIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const student = await prisma.studentProfile.findUnique({
+        where: { id: req.params.studentProfileId },
+        include: { user: true },
+      });
+      if (!student) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'Student profile not found' });
+      }
+
+      const parseResult = toggleUserStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+      }
+
+      const { isActive, reason } = parseResult.data;
+
+      const updatedUser = await prisma.user.update({
+        where: { id: student.userId },
+        data: { isActive },
+        select: {
+          id: true,
+          name: true,
+          email: true,
+          role: true,
+          isActive: true,
+          departmentId: true,
+        },
+      });
+
+      await logAuditEvent({
+        actorUserId: req.user!.id,
+        actorRole: req.user!.role,
+        action: isActive ? 'STUDENT_ACCOUNT_REACTIVATED' : 'STUDENT_ACCOUNT_DEACTIVATED',
+        entityType: 'StudentProfile',
+        entityId: student.id,
+        departmentId: student.departmentId,
+        reason: reason || (isActive ? 'Student reactivated by Academic Administration' : 'Student deactivated by Academic Administration'),
+        oldData: { isActive: student.user.isActive },
+        newData: { isActive, reason },
+        req,
+      });
+
+      return res.json({
+        message: `Student account for ${student.user.name} (${student.rollNumber}) has been ${isActive ? 'reactivated' : 'deactivated'} successfully.`,
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+    }
+  }
+);
+
+academicRouter.put(
+  '/faculty/:facultyProfileId/status',
+  authenticateToken,
+  requireRole('ACADEMIC_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const faculty = await prisma.facultyProfile.findUnique({
+        where: { id: req.params.facultyProfileId },
+        include: { user: true },
+      });
+      if (!faculty) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'Faculty profile not found' });
+      }
+
+      const parseResult = toggleUserStatusSchema.safeParse(req.body);
+      if (!parseResult.success) {
+        return res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
+      }
+
+      const { isActive, reason } = parseResult.data;
+
+      const updatedUser = await prisma.$transaction(async (tx) => {
+        const u = await tx.user.update({
+          where: { id: faculty.userId },
+          data: { isActive },
+          select: {
+            id: true,
+            name: true,
+            email: true,
+            role: true,
+            isActive: true,
+            departmentId: true,
+          },
+        });
+
+        if (!isActive) {
+          await tx.teachingAssignment.updateMany({
+            where: { facultyId: faculty.userId, isActive: true },
+            data: {
+              isActive: false,
+              endDate: new Date(),
+            },
+          });
+        }
+
+        return u;
+      });
+
+      await logAuditEvent({
+        actorUserId: req.user!.id,
+        actorRole: req.user!.role,
+        action: isActive ? 'FACULTY_ACCOUNT_REACTIVATED' : 'FACULTY_ACCOUNT_DEACTIVATED',
+        entityType: 'FacultyProfile',
+        entityId: faculty.id,
+        departmentId: faculty.departmentId,
+        reason: reason || (isActive ? 'Faculty reactivated by Academic Administration' : 'Faculty deactivated by Academic Administration'),
+        oldData: { isActive: faculty.user.isActive },
+        newData: { isActive, reason },
+        req,
+      });
+
+      return res.json({
+        message: `Faculty account for ${faculty.user.name} (${faculty.employeeId}) has been ${isActive ? 'reactivated' : 'deactivated'} successfully.`,
+        user: updatedUser,
+      });
+    } catch (err: any) {
+      return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+    }
+  }
+);
+
+// ============================================================================
 // STUDENT ENROLLMENT
 // ============================================================================
 
@@ -599,6 +824,22 @@ academicRouter.post(
       }
 
       const { offeringId, studentId } = parsed.data;
+
+      const student = await prisma.studentProfile.findUnique({
+        where: { id: studentId },
+        include: { user: true },
+      });
+
+      if (!student) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'Student profile not found' });
+      }
+
+      if (!student.user.isActive) {
+        return res.status(400).json({
+          error: 'STUDENT_ACCOUNT_DEACTIVATED',
+          message: `Cannot enroll student ${student.rollNumber} (${student.user.name}) because the student account is deactivated.`,
+        });
+      }
 
       const existing = await prisma.courseEnrollment.findUnique({
         where: { offeringId_studentId: { offeringId, studentId } },
