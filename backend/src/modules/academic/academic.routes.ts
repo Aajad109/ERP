@@ -878,8 +878,8 @@ const createAnnouncementSchema = z.object({
   title: z.string().min(3),
   content: z.string().min(5),
   category: z.enum(['ACADEMIC', 'EXAMINATION', 'CAMPUS', 'URGENT']),
-  targetRole: z.enum(['STUDENT', 'FACULTY', 'ACADEMIC_ADMIN', 'EXAM_ADMIN']).optional(),
-  departmentId: z.string().uuid().optional(),
+  targetRole: z.enum(['STUDENT', 'FACULTY', 'ACADEMIC_ADMIN', 'EXAM_ADMIN', 'ALL']).optional(),
+  departmentId: z.string().uuid().optional().nullable().or(z.literal('')),
 });
 
 academicRouter.post(
@@ -897,9 +897,16 @@ academicRouter.post(
         return res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.format() });
       }
 
+      const { title, content, category, targetRole, departmentId } = parsed.data;
+      const effectiveRole = (!targetRole || targetRole === 'ALL') ? null : targetRole;
+
       const announcement = await prisma.announcement.create({
         data: {
-          ...parsed.data,
+          title,
+          content,
+          category,
+          targetRole: effectiveRole,
+          departmentId: departmentId || null,
           createdById: req.user!.id,
         },
         include: { createdBy: { select: { id: true, name: true, role: true } } },

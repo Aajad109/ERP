@@ -319,7 +319,7 @@ const createEventSchema = z.object({
   category: z.string().min(2),
   venue: z.string().min(2),
   eventDate: z.string().datetime().or(z.string().regex(/^\d{4}-\d{2}-\d{2}/)),
-  departmentId: z.string().uuid().optional().nullable(),
+  departmentId: z.string().uuid().optional().nullable().or(z.literal('')),
   bannerData: z.string().optional(),
 });
 
