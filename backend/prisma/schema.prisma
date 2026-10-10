@@ -1,0 +1,486 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  FACULTY
+  ACADEMIC_ADMIN
+  EXAM_ADMIN
+}
+
+enum ComponentType {
+  INTERNAL
+  EXTERNAL
+}
+
+model Department {
+  id                    String                 @id @default(uuid())
+  code                  String                 @unique // CSE, CIVIL, CHEM, EEE
+  name                  String
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  sections              Section[]
+  courses               Course[]
+  users                 User[]
+  studentProfiles       StudentProfile[]
+  facultyProfiles       FacultyProfile[]
+  examAdminDesignations ExamAdminDesignation[]
+  events                CampusEvent[]
+  announcements         Announcement[]
+}
+
+model Batch {
+  id              String           @id @default(uuid())
+  name            String           @unique // 2024-2028, 2025-2029, 2026-2030
+  startYear       Int
+  endYear         Int
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  sections        Section[]
+  offerings       CourseOffering[]
+  studentProfiles StudentProfile[]
+}
+
+model Section {
+  id              String           @id @default(uuid())
+  name            String           // A, B, C, D
+  departmentId    String
+  batchId         String
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  department      Department       @relation(fields: [departmentId], references: [id])
+  batch           Batch            @relation(fields: [batchId], references: [id])
+  offerings       CourseOffering[]
+  studentProfiles StudentProfile[]
+
+  @@unique([batchId, departmentId, name])
+}
+
+model User {
+  id                    String                 @id @default(uuid())
+  email                 String                 @unique
+  passwordHash          String
+  name                  String
+  role                  Role
+  departmentId          String?
+  isActive              Boolean                @default(true)
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  department            Department?            @relation(fields: [departmentId], references: [id])
+  studentProfile        StudentProfile?
+  facultyProfile        FacultyProfile?
+  examAdminDesignation  ExamAdminDesignation?
+  teachingAssignments   TeachingAssignment[]   @relation("FacultyAssignments")
+  createdAssignments    TeachingAssignment[]   @relation("AssignedByAdmin")
+  recordedMarks         AssessmentMark[]
+  publishedResults      PublishedResult[]
+  resultHistoryChanges  ResultVersionHistory[]
+  attendanceSessions    AttendanceSession[]
+  reportedItems         LostAndFoundItem[]     @relation("ReportedByUser")
+  claimedItems          LostAndFoundItem[]     @relation("ClaimedByUser")
+  claimsSubmitted       ItemClaim[]
+  createdEvents         CampusEvent[]
+  eventUpvotes          EventUpvote[]
+  eventRsvps            EventRsvp[]
+  createdAnnouncements  Announcement[]
+  assignedEvaluations   RevaluationRequest[]
+}
+
+model ExamAdminDesignation {
+  id           String     @id @default(uuid())
+  userId       String     @unique
+  departmentId String
+  isActive     Boolean    @default(true)
+  assignedAt   DateTime   @default(now())
+  assignedBy   String?
+  user         User       @relation(fields: [userId], references: [id])
+  department   Department @relation(fields: [departmentId], references: [id])
+
+  @@unique([departmentId, isActive])
+}
+
+model StudentProfile {
+  id                 String             @id @default(uuid())
+  userId             String             @unique
+  rollNumber         String             @unique
+  departmentId       String
+  batchId            String
+  sectionId          String
+  currentSemester    Int                @default(1)
+  user               User               @relation(fields: [userId], references: [id])
+  department         Department         @relation(fields: [departmentId], references: [id])
+  batch              Batch              @relation(fields: [batchId], references: [id])
+  section            Section            @relation(fields: [sectionId], references: [id])
+  enrollments        CourseEnrollment[]
+  marks              AssessmentMark[]
+  results            PublishedResult[]
+  correctionRequests CorrectionRequest[]
+  revaluationRequests RevaluationRequest[]
+  attendanceRecords  AttendanceRecord[]
+}
+
+model FacultyProfile {
+  id           String     @id @default(uuid())
+  userId       String     @unique
+  employeeId   String     @unique
+  departmentId String
+  designation  String
+  user         User       @relation(fields: [userId], references: [id])
+  department   Department @relation(fields: [departmentId], references: [id])
+}
+
+model Course {
+  id           String           @id @default(uuid())
+  code         String           @unique
+  title        String
+  departmentId String
+  credits      Int              @default(4)
+  isTheory     Boolean          @default(true)
+  isLab        Boolean          @default(false)
+  createdAt    DateTime         @default(now())
+  updatedAt    DateTime         @updatedAt
+  department   Department       @relation(fields: [departmentId], references: [id])
+  offerings    CourseOffering[]
+}
+
+model CourseOffering {
+  id                  String                @id @default(uuid())
+  courseId            String
+  batchId             String
+  sectionId           String
+  semester            Int
+  academicYear        String                // e.g. "2024-2025"
+  status              String                @default("ACTIVE") // ACTIVE, COMPLETED
+  createdAt           DateTime              @default(now())
+  updatedAt           DateTime              @updatedAt
+  course              Course                @relation(fields: [courseId], references: [id])
+  batch               Batch                 @relation(fields: [batchId], references: [id])
+  section             Section               @relation(fields: [sectionId], references: [id])
+  teachingAssignments TeachingAssignment[]
+  enrollments         CourseEnrollment[]
+  components          AssessmentComponent[]
+  marks               AssessmentMark[]
+  results             PublishedResult[]
+  attendanceSessions  AttendanceSession[]
+  correctionRequests  CorrectionRequest[]
+  timetableSlots      TimetableSlot[]
+}
+
+model CourseEnrollment {
+  id         String         @id @default(uuid())
+  offeringId String
+  studentId  String
+  enrolledAt DateTime       @default(now())
+  offering   CourseOffering @relation(fields: [offeringId], references: [id])
+  student    StudentProfile @relation(fields: [studentId], references: [id])
+
+  @@unique([offeringId, studentId])
+}
+
+model TeachingAssignment {
+  id           String         @id @default(uuid())
+  offeringId   String
+  facultyId    String
+  startDate    DateTime
+  endDate      DateTime?
+  isActive     Boolean        @default(true)
+  reason       String?
+  assignedById String
+  createdAt    DateTime       @default(now())
+  updatedAt    DateTime       @updatedAt
+  offering     CourseOffering @relation(fields: [offeringId], references: [id])
+  faculty      User           @relation("FacultyAssignments", fields: [facultyId], references: [id])
+  assignedBy   User           @relation("AssignedByAdmin", fields: [assignedById], references: [id])
+}
+
+model AssessmentComponent {
+  id         String          @id @default(uuid())
+  offeringId String
+  name       String          // e.g. "Mid-1", "Mid-2", "Continuous Quizzes", "End-Sem External"
+  type       ComponentType   // INTERNAL, EXTERNAL
+  maxMarks   Float           // Sum of INTERNAL must be 40; EXTERNAL must be 60
+  weightage  Float           @default(1.0)
+  order      Int             @default(1)
+  offering   CourseOffering  @relation(fields: [offeringId], references: [id])
+  marks      AssessmentMark[]
+}
+
+model AssessmentMark {
+  id                  String              @id @default(uuid())
+  componentId         String
+  studentId           String
+  offeringId          String
+  marksObtained       Float?
+  isAbsent            Boolean             @default(false)
+  recordedByFacultyId String
+  status              String              @default("DRAFT") // DRAFT, SUBMITTED, VERIFIED, LOCKED
+  version             Int                 @default(1)       // For Optimistic Concurrency Control
+  createdAt           DateTime            @default(now())
+  updatedAt           DateTime            @updatedAt
+  component           AssessmentComponent @relation(fields: [componentId], references: [id])
+  student             StudentProfile      @relation(fields: [studentId], references: [id])
+  offering            CourseOffering      @relation(fields: [offeringId], references: [id])
+  recordedBy          User                @relation(fields: [recordedByFacultyId], references: [id])
+
+  @@unique([componentId, studentId])
+}
+
+model PublishedResult {
+  id                     String                 @id @default(uuid())
+  offeringId             String
+  studentId              String
+  currentVersion         Int                    @default(1)
+  internalMarks          Float
+  externalMarks          Float
+  totalMarks             Float
+  grade                  String                 // O, A+, A, B+, B, C, P, F, AB
+  gradePoint             Float
+  isPassed               Boolean
+  sgpa                   Float?
+  cgpa                   Float?
+  cgpaStatus             String                 // OFFICIAL, WITHHELD_FAILED_SUBJECTS
+  publicationState       String                 @default("PUBLISHED") // PUBLISHED, SUPERSEDED
+  publishedAt            DateTime               @default(now())
+  publishedByExamAdminId String
+  createdAt              DateTime               @default(now())
+  updatedAt              DateTime               @updatedAt
+  offering               CourseOffering         @relation(fields: [offeringId], references: [id])
+  student                StudentProfile         @relation(fields: [studentId], references: [id])
+  publishedBy            User                   @relation(fields: [publishedByExamAdminId], references: [id])
+  history                ResultVersionHistory[]
+  correctionRequests     CorrectionRequest[]
+  revaluationRequests    RevaluationRequest[]
+
+  @@unique([offeringId, studentId])
+}
+
+model ResultVersionHistory {
+  id                 String          @id @default(uuid())
+  resultId           String
+  versionNumber      Int
+  internalMarks      Float
+  externalMarks      Float
+  totalMarks         Float
+  grade              String
+  gradePoint         Float
+  isPassed           Boolean
+  sgpa               Float?
+  cgpa               Float?
+  cgpaStatus         String
+  changeType         String          // INITIAL_PUBLICATION, NORMAL_FACULTY_CORRECTION, DIRECT_ADMIN_CORRECTION
+  correctionCategory String?         // TRANSCRIPTION_ERROR, IMPORT_MAPPING_ERROR, APPROVED_CALCULATION_CORRECTION
+  evidenceReference  String?
+  reason             String?
+  changedByUserId    String
+  createdAt          DateTime        @default(now())
+  result             PublishedResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  changedBy          User            @relation(fields: [changedByUserId], references: [id])
+}
+
+model CorrectionRequest {
+  id                   String          @id @default(uuid())
+  resultId             String
+  studentId            String
+  offeringId           String
+  reason               String
+  requestedMarks       Float?
+  status               String          @default("PENDING_FACULTY") // PENDING_FACULTY, PROPOSED_BY_FACULTY, REJECTED_BY_FACULTY, APPROVED_BY_EXAM_ADMIN, REJECTED_BY_EXAM_ADMIN
+  facultyReviewReason  String?
+  proposedMarks        Float?
+  reviewedByFacultyId  String?
+  examAdminReason      String?
+  decidedByExamAdminId String?
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+  result               PublishedResult @relation(fields: [resultId], references: [id])
+  student              StudentProfile  @relation(fields: [studentId], references: [id])
+  offering             CourseOffering  @relation(fields: [offeringId], references: [id])
+}
+
+model AttendanceSession {
+  id          String             @id @default(uuid())
+  offeringId  String
+  facultyId   String
+  sessionDate DateTime           @default(now())
+  topic       String
+  createdAt   DateTime           @default(now())
+  offering    CourseOffering     @relation(fields: [offeringId], references: [id])
+  faculty     User               @relation(fields: [facultyId], references: [id])
+  records     AttendanceRecord[]
+}
+
+model AttendanceRecord {
+  id        String            @id @default(uuid())
+  sessionId String
+  studentId String
+  isPresent Boolean           @default(true)
+  version   Int               @default(1)
+  session   AttendanceSession @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  student   StudentProfile    @relation(fields: [studentId], references: [id])
+
+  @@unique([sessionId, studentId])
+}
+
+model AuditLog {
+  id           String   @id @default(uuid())
+  actorUserId  String
+  actorRole    String
+  action       String   // e.g. MARKS_UPDATED, CONCURRENT_MODIFICATION_CONFLICT, DIRECT_RESULT_CORRECTION, UNAUTHORIZED_ACCESS_DENIED, FACULTY_REASSIGNMENT
+  entityType   String
+  entityId     String
+  departmentId String?
+  category     String?
+  evidenceRef  String?
+  reason       String?
+  oldData      Json?
+  newData      Json?
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+}
+
+enum ItemStatus {
+  OPEN
+  CLAIMED
+  RESOLVED
+}
+
+enum ItemType {
+  LOST
+  FOUND
+}
+
+enum ClaimStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum RsvpStatus {
+  ATTENDING
+  INTERESTED
+}
+
+model LostAndFoundItem {
+  id           String      @id @default(uuid())
+  title        String
+  description  String
+  type         ItemType    // LOST or FOUND
+  category     String      // Electronics, Cards, Books, Clothing, Other
+  location     String
+  imageUrl     String?
+  status       ItemStatus  @default(OPEN)
+  reportedById String
+  claimedById  String?
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  reportedBy   User        @relation("ReportedByUser", fields: [reportedById], references: [id])
+  claimedBy    User?       @relation("ClaimedByUser", fields: [claimedById], references: [id])
+  claims       ItemClaim[]
+}
+
+model ItemClaim {
+  id               String            @id @default(uuid())
+  itemId           String
+  claimantId       String
+  proofDescription String
+  contactInfo      String
+  status           ClaimStatus       @default(PENDING)
+  reviewNotes      String?
+  resolvedAt       DateTime?
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  item             LostAndFoundItem  @relation(fields: [itemId], references: [id], onDelete: Cascade)
+  claimant         User              @relation(fields: [claimantId], references: [id])
+}
+
+model CampusEvent {
+  id           String        @id @default(uuid())
+  title        String
+  description  String
+  category     String        // Technical, Cultural, Sports, Workshop, Hackathon
+  departmentId String?
+  venue        String
+  eventDate    DateTime
+  bannerUrl    String?
+  createdById  String
+  createdAt    DateTime      @default(now())
+  updatedAt    DateTime      @updatedAt
+  createdBy    User          @relation(fields: [createdById], references: [id])
+  department   Department?   @relation(fields: [departmentId], references: [id])
+  upvotes      EventUpvote[]
+  rsvps        EventRsvp[]
+}
+
+model EventUpvote {
+  id        String      @id @default(uuid())
+  eventId   String
+  userId    String
+  createdAt DateTime    @default(now())
+  event     CampusEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+}
+
+model EventRsvp {
+  id        String      @id @default(uuid())
+  eventId   String
+  userId    String
+  status    RsvpStatus  @default(ATTENDING)
+  createdAt DateTime    @default(now())
+  event     CampusEvent @relation(fields: [eventId], references: [id], onDelete: Cascade)
+  user      User        @relation(fields: [userId], references: [id])
+
+  @@unique([eventId, userId])
+}
+
+model TimetableSlot {
+  id          String         @id @default(uuid())
+  offeringId  String
+  dayOfWeek   String         // MON, TUE, WED, THU, FRI, SAT
+  startTime   String         // e.g. "09:00"
+  endTime     String         // e.g. "10:00"
+  roomNumber  String         // e.g. "LH-101"
+  createdAt   DateTime       @default(now())
+  updatedAt   DateTime       @updatedAt
+  offering    CourseOffering @relation(fields: [offeringId], references: [id], onDelete: Cascade)
+
+  @@unique([dayOfWeek, startTime, roomNumber])
+}
+
+model Announcement {
+  id           String      @id @default(uuid())
+  title        String
+  content      String
+  category     String      // ACADEMIC, EXAMINATION, CAMPUS, URGENT
+  targetRole   Role?
+  departmentId String?
+  createdById  String
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+  department   Department? @relation(fields: [departmentId], references: [id])
+  createdBy    User        @relation(fields: [createdById], references: [id])
+}
+
+model RevaluationRequest {
+  id                  String          @id @default(uuid())
+  resultId            String
+  studentId           String
+  reason              String
+  originalMarks       Float
+  revisedMarks        Float?
+  status              String          @default("SUBMITTED") // SUBMITTED, UNDER_REVIEW, APPROVED, REJECTED
+  assignedEvaluatorId String?
+  decisionNotes       String?
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+  result              PublishedResult @relation(fields: [resultId], references: [id], onDelete: Cascade)
+  student             StudentProfile  @relation(fields: [studentId], references: [id])
+  assignedEvaluator   User?           @relation(fields: [assignedEvaluatorId], references: [id])
+}
