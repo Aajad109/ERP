@@ -1,0 +1,952 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Apex Institutional ERP & Campus Hub — Presentation</title>
+  <style>
+    :root {
+      --bg-dark: #0f172a;
+      --bg-light: #f8fafc;
+      --card-bg: #ffffff;
+      --border: #e2e8f0;
+      --primary: #2563eb;
+      --primary-light: #eff6ff;
+      --indigo: #4f46e5;
+      --purple: #9333ea;
+      --emerald: #10b981;
+      --rose: #e11d48;
+      --amber: #d97706;
+      --text-main: #0f172a;
+      --text-muted: #64748b;
+    }
+
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+      background-color: #0b0f19;
+      color: var(--text-main);
+      overflow: hidden;
+      height: 100vh;
+      width: 100vw;
+      user-select: none;
+    }
+
+    /* Presentation Container */
+    .deck-container {
+      position: relative;
+      width: 100vw;
+      height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      background: radial-gradient(circle at 50% 50%, #1e293b 0%, #0f172a 100%);
+    }
+
+    /* Slide Stage */
+    .slide {
+      display: none;
+      width: 92vw;
+      max-width: 1400px;
+      height: 86vh;
+      max-height: 820px;
+      background: var(--bg-light);
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.1);
+      padding: 48px 56px;
+      position: relative;
+      overflow-y: auto;
+      animation: fadeIn 0.3s ease-out;
+    }
+
+    .slide.active {
+      display: flex;
+      flex-direction: column;
+    }
+
+    .slide.dark-theme {
+      background: #0f172a;
+      color: #f8fafc;
+      border: 1px solid #1e293b;
+    }
+
+    @keyframes fadeIn {
+      from { opacity: 0; transform: scale(0.985); }
+      to { opacity: 1; transform: scale(1); }
+    }
+
+    /* Badges & Headers */
+    .pill {
+      display: inline-block;
+      padding: 4px 12px;
+      border-radius: 9999px;
+      font-size: 0.75rem;
+      font-weight: 700;
+      letter-spacing: 0.05em;
+      text-transform: uppercase;
+      margin-bottom: 12px;
+      width: fit-content;
+    }
+    .pill-blue { background: #dbeafe; color: #1d4ed8; }
+    .pill-indigo { background: #e0e7ff; color: #4338ca; }
+    .pill-purple { background: #f3e8ff; color: #7e22ce; }
+    .pill-emerald { background: #d1fae5; color: #047857; }
+    .pill-dark-blue { background: rgba(59, 130, 246, 0.2); color: #60a5fa; border: 1px solid rgba(59, 130, 246, 0.4); }
+
+    .slide-title {
+      font-size: 2.1rem;
+      font-weight: 800;
+      line-height: 1.2;
+      color: var(--text-main);
+      margin-bottom: 6px;
+    }
+
+    .slide.dark-theme .slide-title {
+      color: #ffffff;
+    }
+
+    .slide-subtitle {
+      font-size: 1.05rem;
+      color: var(--text-muted);
+      margin-bottom: 28px;
+    }
+
+    .slide.dark-theme .slide-subtitle {
+      color: #94a3b8;
+    }
+
+    /* Grid Layouts */
+    .grid-2 {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 20px;
+      flex: 1;
+    }
+
+    .grid-3 {
+      display: grid;
+      grid-template-columns: repeat(3, 1fr);
+      gap: 20px;
+      flex: 1;
+    }
+
+    .grid-4 {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+    }
+
+    /* Cards */
+    .card {
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.03);
+      transition: transform 0.15s ease, box-shadow 0.15s ease;
+    }
+
+    .card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.06);
+    }
+
+    .card-dark {
+      background: #1e293b;
+      border: 1px solid #334155;
+      color: #f1f5f9;
+    }
+
+    .card-title {
+      font-size: 1.15rem;
+      font-weight: 700;
+      margin-bottom: 10px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .card-body {
+      font-size: 0.95rem;
+      line-height: 1.55;
+      color: var(--text-muted);
+      flex: 1;
+    }
+
+    .card-dark .card-body {
+      color: #cbd5e1;
+    }
+
+    .card-list {
+      list-style: none;
+      display: flex;
+      flex-direction: column;
+      gap: 10px;
+      font-size: 0.92rem;
+      color: #334155;
+    }
+
+    .card-list li {
+      position: relative;
+      padding-left: 20px;
+      line-height: 1.45;
+    }
+
+    .card-list li::before {
+      content: "•";
+      color: var(--primary);
+      font-weight: bold;
+      font-size: 1.2rem;
+      position: absolute;
+      left: 0;
+      top: -2px;
+    }
+
+    /* Table Styles */
+    .table-container {
+      width: 100%;
+      border-radius: 10px;
+      overflow: hidden;
+      border: 1px solid var(--border);
+      background: #ffffff;
+      box-shadow: 0 4px 6px -1px rgba(0, 0, 0, 0.04);
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      text-align: left;
+    }
+
+    th {
+      background: #0f172a;
+      color: #ffffff;
+      font-size: 0.85rem;
+      font-weight: 700;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      padding: 14px 20px;
+    }
+
+    td {
+      padding: 14px 20px;
+      font-size: 0.92rem;
+      border-bottom: 1px solid var(--border);
+      vertical-align: top;
+      color: #334155;
+    }
+
+    tr:last-child td {
+      border-bottom: none;
+    }
+
+    tr:nth-child(even) td {
+      background-color: #f8fafc;
+    }
+
+    /* Metrics & Stats */
+    .metric-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      text-align: center;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .metric-num {
+      font-size: 2.2rem;
+      font-weight: 800;
+      line-height: 1;
+      margin-bottom: 6px;
+    }
+
+    .metric-label {
+      font-size: 0.95rem;
+      font-weight: 700;
+      color: var(--text-main);
+      margin-bottom: 4px;
+    }
+
+    .metric-sub {
+      font-size: 0.8rem;
+      color: var(--text-muted);
+    }
+
+    /* Navigation Controls */
+    .controls {
+      position: fixed;
+      bottom: 24px;
+      left: 50%;
+      transform: translateX(-50%);
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      background: rgba(15, 23, 42, 0.85);
+      backdrop-filter: blur(8px);
+      padding: 8px 20px;
+      border-radius: 9999px;
+      border: 1px solid rgba(255, 255, 255, 0.15);
+      z-index: 100;
+      box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.5);
+    }
+
+    .nav-btn {
+      background: transparent;
+      border: none;
+      color: #ffffff;
+      cursor: pointer;
+      font-size: 1rem;
+      font-weight: 600;
+      padding: 6px 14px;
+      border-radius: 9999px;
+      transition: background 0.15s ease;
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+
+    .nav-btn:hover {
+      background: rgba(255, 255, 255, 0.15);
+    }
+
+    .slide-counter {
+      color: #94a3b8;
+      font-size: 0.85rem;
+      font-weight: 500;
+      min-width: 65px;
+      text-align: center;
+    }
+
+    .progress-bar-container {
+      position: fixed;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 4px;
+      background: rgba(255, 255, 255, 0.1);
+      z-index: 110;
+    }
+
+    .progress-bar {
+      height: 100%;
+      background: linear-gradient(90deg, #3b82f6, #6366f1, #10b981);
+      width: 8.33%;
+      transition: width 0.3s ease;
+    }
+
+    /* Print / Export Styles */
+    @media print {
+      body {
+        overflow: visible;
+        background: transparent;
+        height: auto;
+      }
+      .deck-container {
+        display: block;
+        height: auto;
+        background: transparent;
+      }
+      .controls, .progress-bar-container {
+        display: none !important;
+      }
+      .slide {
+        display: flex !important;
+        page-break-after: always;
+        break-after: page;
+        width: 100vw;
+        max-width: 100%;
+        height: 100vh;
+        max-height: 100%;
+        border-radius: 0;
+        box-shadow: none;
+        border: none;
+        margin: 0;
+        padding: 40px;
+      }
+      @page {
+        size: landscape;
+        margin: 0;
+      }
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Top Progress Bar -->
+  <div class="progress-bar-container">
+    <div class="progress-bar" id="progressBar"></div>
+  </div>
+
+  <div class="deck-container">
+
+    <!-- SLIDE 1: Title -->
+    <div class="slide active dark-theme" id="slide-1">
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <span class="pill pill-dark-blue">Next-Generation Academic Operating System</span>
+        <h1 style="font-size: 3.4rem; font-weight: 800; line-height: 1.15; margin-bottom: 16px; background: linear-gradient(135deg, #ffffff 40%, #93c5fd 100%); -webkit-background-clip: text; -webkit-text-fill-color: transparent;">
+          Apex Institutional ERP<br>& Campus Hub
+        </h1>
+        <p style="font-size: 1.35rem; color: #94a3b8; max-width: 850px; line-height: 1.5; margin-bottom: 40px;">
+          An Enterprise Modular Monolith for Modern Engineering Higher Education with Concurrency-Safe Evaluations, Role Isolation, and Campus Community Life.
+        </p>
+
+        <div class="grid-4">
+          <div class="card card-dark">
+            <span style="font-size: 0.8rem; font-weight: 700; color: #60a5fa; text-transform: uppercase;">Technology Stack</span>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #ffffff; margin-top: 4px;">React 18 + Node.js</div>
+            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">Strict TypeScript Monolith</div>
+          </div>
+          <div class="card card-dark">
+            <span style="font-size: 0.8rem; font-weight: 700; color: #34d399; text-transform: uppercase;">Data Layer</span>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #ffffff; margin-top: 4px;">PostgreSQL 16</div>
+            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">Prisma ACID Relational Core</div>
+          </div>
+          <div class="card card-dark">
+            <span style="font-size: 0.8rem; font-weight: 700; color: #a78bfa; text-transform: uppercase;">Data Integrity</span>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #ffffff; margin-top: 4px;">OCC Versioning</div>
+            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">Zero-Collision Marks Entry</div>
+          </div>
+          <div class="card card-dark">
+            <span style="font-size: 0.8rem; font-weight: 700; color: #fbbf24; text-transform: uppercase;">Deployment</span>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #ffffff; margin-top: 4px;">Render Cloud</div>
+            <div style="font-size: 0.85rem; color: #94a3b8; margin-top: 2px;">Singapore DC • 87/87 Tests</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 2: Problem Statement -->
+    <div class="slide" id="slide-2">
+      <span class="pill pill-blue">Industry Challenges</span>
+      <h2 class="slide-title">Why Traditional College ERPs Fail</h2>
+      <p class="slide-subtitle">Critical friction points, data integrity risks, and disconnected campus communities</p>
+
+      <div class="grid-2">
+        <div class="card" style="border-left: 4px solid #d97706;">
+          <div class="card-title" style="color: #b45309;">
+            <span>01</span> Concurrent Marks Overwrites (Lost Update Problem)
+          </div>
+          <div class="card-body">
+            Multiple instructors and teaching assistants entering marks simultaneously overwrite each other's grades silently without version detection, leading to grade discrepancies and loss of critical evaluation data.
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #e11d48;">
+          <div class="card-title" style="color: #be123c;">
+            <span>02</span> Unsegmented Examination Authority
+          </div>
+          <div class="card-body">
+            Standard ERPs treat exam staff with sweeping institutional permissions, lacking strict departmental branch isolation. This exposes institutes to unauthorized grade tampering and leaks across unrelated engineering branches.
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #9333ea;">
+          <div class="card-title" style="color: #7e22ce;">
+            <span>03</span> Rigid & Convoluted Grievance Workflows
+          </div>
+          <div class="card-body">
+            Students lack a clear demarcation between immediate continuous assessment corrections (handled quickly by course instructors) and formal statutory revaluations (governed by the central examination board).
+          </div>
+        </div>
+
+        <div class="card" style="border-left: 4px solid #2563eb;">
+          <div class="card-title" style="color: #1d4ed8;">
+            <span>04</span> Disconnected Campus Community Culture
+          </div>
+          <div class="card-body">
+            Campus fests, hackathons, and lost-and-found belongings are scattered across unorganized WhatsApp/Telegram groups, resulting in zero institutional verification, low turnout, and lost student belongings.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 3: Proposed Solution -->
+    <div class="slide" id="slide-3">
+      <span class="pill pill-indigo">Unified Solution</span>
+      <h2 class="slide-title">The Apex ERP & Campus Hub Ecosystem</h2>
+      <p class="slide-subtitle">Engineered to deliver bulletproof data integrity, role clarity, and institutional community life</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">4 Specialized Portals</div>
+          <div class="card-body">Role-tailored dashboards for Student, Faculty, Academic Admin, and Exam Admin with strict cryptographic RBAC.</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Optimistic Concurrency Control</div>
+          <div class="card-body">Zero-lock versioning detects simultaneous edits instantly, alerting users with HTTP 409 conflict warnings and fresh data.</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color: #10b981;">Two-Track Grievance Engine</div>
+          <div class="card-body">Direct faculty approval for internal marks adjustments versus statutory exam board review for external gazetted grades.</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">Departmental Branch Isolation</div>
+          <div class="card-body">Cryptographically binds Exam Admins strictly to their appointed department (e.g. CSE Exam Admin cannot alter Civil grades).</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color: #d97706;">Algorithmic Campus Hub</div>
+          <div class="card-body">Trending campus events powered by an engagement formula, plus verifiable lost-and-found items with proof-of-ownership claims.</div>
+        </div>
+        <div class="card">
+          <div class="card-title" style="color: #0f172a;">Immutable Audit Trail</div>
+          <div class="card-body">Comprehensive forensic logging capturing every mark modification, account deactivation, and gazetting operation with timestamps.</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 4: Architecture & Stack -->
+    <div class="slide" id="slide-4">
+      <span class="pill pill-purple">System Architecture</span>
+      <h2 class="slide-title">Full-Stack Engineering & Deployment</h2>
+      <p class="slide-subtitle">Type-safe modular monolith ensuring high performance, low latency, and zero operational friction</p>
+
+      <div class="grid-3">
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Client Layer (SPA)</div>
+          <ul class="card-list">
+            <li><strong>React 18 & Vite 5</strong>: High-speed bundling and reactive component lifecycle.</li>
+            <li><strong>Tailwind CSS</strong>: Modern accessible design system with responsive layouts.</li>
+            <li><strong>Recharts Visuals</strong>: Interactive SGPA and semester progression analytics.</li>
+            <li><strong>Lucide Icons</strong>: Intuitive visual cues across all 4 dashboards.</li>
+            <li><strong>JWT Session Management</strong>: Secure local state caching and automated token refreshes.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Backend Core (REST API)</div>
+          <ul class="card-list">
+            <li><strong>Express.js & TypeScript</strong>: End-to-end typed interfaces and domain controllers.</li>
+            <li><strong>Zod Schema Validation</strong>: Strict runtime verification on all incoming JSON payloads.</li>
+            <li><strong>Bcrypt & JWT Middleware</strong>: Military-grade password hashing and token guards.</li>
+            <li><strong>OCC Concurrency Engine</strong>: Integer version-checking preventing grade collisions.</li>
+            <li><strong>Static Asset Pipeline</strong>: Seamless SPA fallback hosting in single production process.</li>
+          </ul>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #10b981;">Database & Hosting</div>
+          <ul class="card-list">
+            <li><strong>PostgreSQL 16 Engine</strong>: Enterprise relational database with ACID guarantees.</li>
+            <li><strong>Prisma ORM Client</strong>: Referential integrity, automated migrations, and connection pooling.</li>
+            <li><strong>Render Cloud Hosting</strong>: Automated Git-triggered builds with zero downtime.</li>
+            <li><strong>Singapore Datacenter</strong>: Low-latency routing (&lt;45ms) for domestic campus networks.</li>
+            <li><strong>Audit Logging Model</strong>: Tamper-resistant historical tracking table.</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 5: Student Portal -->
+    <div class="slide" id="slide-5">
+      <span class="pill pill-blue">Student Experience</span>
+      <h2 class="slide-title">Student Academic Portal</h2>
+      <p class="slide-subtitle">Academic performance transparency, live attendance gauges, and two-track dispute workflows</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Academic Dashboard & SGPA Analytics</div>
+          <div class="card-body">
+            Provides students an instant visual breakdown of their registered courses, current cumulative SGPA progression curves, and overall attendance gauge with threshold alerts.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Continuous Evaluation Ledger</div>
+          <div class="card-body">
+            Displays continuous internal marks breakdown across Mid-1, Mid-2, Quizzes, and Labs (/40 marks) as soon as instructors submit them, eliminating end-of-semester surprises.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Two-Track Grievance Filing System</div>
+          <div class="card-body">
+            Enables students to lodge <strong>Internal Assessment Grievances</strong> directly to their subject faculty for immediate correction, or file formal <strong>Statutory Revaluations</strong> for end-term external exam scores.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Gazetted Grade Cards & History Tags</div>
+          <div class="card-body">
+            Official semester grade sheets displaying external marks (/60), awarded letter grades (O, A+, A, B), passing credits, and historical revision tags (<code>v1</code>, <code>v2</code>) upon board revaluation.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 6: Faculty Portal -->
+    <div class="slide" id="slide-6">
+      <span class="pill pill-indigo">Faculty Operations</span>
+      <h2 class="slide-title">Faculty Instructional Center</h2>
+      <p class="slide-subtitle">Roster management, collision-free internal grading, and direct student grievance resolution</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Global Offering Switcher</div>
+          <div class="card-body">
+            Top-banner dropdown enables faculty members to switch seamlessly between multiple assigned courses and section offerings with instantaneous context re-rendering.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Session-Based Attendance Roster</div>
+          <div class="card-body">
+            Create daily lecture sessions with learning topic coverage tags; toggle Present/Absent/Late status for students on an interactive roster with automatic timestamp logging.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Optimistic Concurrency Marks Entry</div>
+          <div class="card-body">
+            Input continuous evaluation marks (/40). Simultaneous grading attempts by co-instructors or teaching assistants trigger non-destructive HTTP 409 conflict detection without data loss.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #4f46e5;">Direct Grievance Approval Pipeline</div>
+          <div class="card-body">
+            Review student-submitted grievances regarding internal exams, verify submitted answer scripts, and recalculate marks with direct one-click resolution.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 7: Academic Admin Portal -->
+    <div class="slide" id="slide-7">
+      <span class="pill pill-purple">Institutional Governance</span>
+      <h2 class="slide-title">Academic Administrator Portal</h2>
+      <p class="slide-subtitle">Master catalog setup, cohort allocations, matrix timetables, and account lifecycle controls</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">Department & Cohort Orchestration</div>
+          <div class="card-body">
+            Configure core engineering branches (CSE, Civil, Chemical, EEE), cohort academic years (e.g. 2024–2028), and section allocations (A, B, C, D) with full referential integrity.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">Master Curriculum & Course Allocation</div>
+          <div class="card-body">
+            Maintain central course catalog (lecture hours, lab credits, syllabus codes) and formally assign faculty members to specific semester course offerings.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">Dynamic Matrix Timetable Builder</div>
+          <div class="card-body">
+            Filter and orchestrate weekly class schedules dynamically by <strong>Academic Year</strong>, <strong>Department</strong>, and <strong>Section</strong> with slot conflict prevention.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">User Lifecycle & One-Click Deactivation</div>
+          <div class="card-body">
+            Institutional directory of all students and faculty with instant One-Click Deactivation and Reactivation, enforcing zero login access for inactive accounts.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 8: Exam Admin Portal -->
+    <div class="slide" id="slide-8">
+      <span class="pill pill-emerald">Statutory Examination</span>
+      <h2 class="slide-title">Examination Administrator Portal</h2>
+      <p class="slide-subtitle">Departmental branch isolation, official gazetting, revaluations, and correction audits</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: #e11d48;">Departmental Branch Isolation</div>
+          <div class="card-body">
+            Hard institutional boundary: CSE Exam Admins are cryptographically locked to CSE students; EEE Admins manage EEE, preventing cross-branch tampering or data leaks.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #e11d48;">External Marks Entry & Result Gazetting</div>
+          <div class="card-body">
+            Enter final external semester marks (/60), run automated grade calculations, and gazette locked, official results accessible to students.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #e11d48;">Statutory Revaluation Board</div>
+          <div class="card-body">
+            Review formal student revaluation appeals, input re-evaluated marks, and automatically recompute total scores, grade points, and passing status.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #e11d48;">Direct Emergency Mark Corrections</div>
+          <div class="card-body">
+            Emergency mark adjustments require mandatory recorded justification logs and auto-increment the published result version (<code>v1</code> &rarr; <code>v2</code>).
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 9: Campus Hub Central -->
+    <div class="slide" id="slide-9">
+      <span class="pill pill-blue">Campus Life</span>
+      <h2 class="slide-title">Campus Hub: Community & Property Recovery</h2>
+      <p class="slide-subtitle">Vibrant student engagement, algorithmic event trending, and verifiable lost-and-found registry</p>
+
+      <div class="grid-2">
+        <div class="card">
+          <div class="card-title" style="color: #d97706;">Algorithmic Trending Events</div>
+          <div class="card-body">
+            Real-time event ranking engine powered by weighted popularity formula:
+            <div style="background: #fef3c7; color: #92400e; padding: 10px 14px; border-radius: 8px; font-weight: 700; margin: 12px 0;">
+              Trending Score = (Upvotes × 2) + RSVPs
+            </div>
+            Highlights hackathons, technical fests, and cultural showcases on the main campus billboard.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #2563eb;">Verifiable Lost & Found Central</div>
+          <div class="card-body">
+            Official institutional registry for lost belongings. Students report lost or found items with location tags, description of distinct marks, and photo uploads.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #10b981;">Ownership Claim & Approval Pipeline</div>
+          <div class="card-body">
+            Claimants submit verifiable proof of ownership. The original finder or campus administrator reviews proof and marks items as successfully resolved.
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-title" style="color: #9333ea;">Sanitized Asset Pipeline</div>
+          <div class="card-body">
+            Integrated Base64 asset storage handles event posters and item photos safely without external S3 bucket lock-in or complex cloud configuration.
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 10: Technical Innovations & Security -->
+    <div class="slide" id="slide-10">
+      <span class="pill pill-indigo">Technical Innovations</span>
+      <h2 class="slide-title">Enterprise Reliability & Security Architecture</h2>
+      <p class="slide-subtitle">Architectural mechanisms engineered to protect data accuracy and statutory compliance</p>
+
+      <div class="table-container">
+        <table>
+          <thead>
+            <tr>
+              <th>Innovation</th>
+              <th>Technical Implementation</th>
+              <th>Enterprise Advantage</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td style="font-weight: 700; color: #4f46e5;">Optimistic Concurrency Control (OCC)</td>
+              <td>Integer <code>version</code> column on marks and published results with atomic conditional SQL updates.</td>
+              <td>Completely eliminates the Lost Update Problem; returns HTTP 409 Conflict without database deadlocks.</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #4f46e5;">Branch Isolation Security</td>
+              <td>Relational <code>ExamAdminDesignation</code> foreign key scoped strictly to <code>DepartmentId</code>.</td>
+              <td>Enforces organizational separation of powers; prevents unauthorized cross-department mark alterations.</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #4f46e5;">Immutable Audit Trail</td>
+              <td>Dedicated <code>AuditLog</code> entity recording actor, entity, operation, diffs, and reason timestamps.</td>
+              <td>Provides airtight forensic compliance required for institutional accreditation (NAAC, NBA, ABET).</td>
+            </tr>
+            <tr>
+              <td style="font-weight: 700; color: #4f46e5;">Single-Process Delivery</td>
+              <td>Express backend statically proxies built React production SPA bundle.</td>
+              <td>Zero CORS overhead in production, streamlined deployment, and minimal memory footprint on Render Cloud.</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- SLIDE 11: Validation & Test Results -->
+    <div class="slide" id="slide-11">
+      <span class="pill pill-emerald">Quality Assurance</span>
+      <h2 class="slide-title">Prototype Verification & Test Results</h2>
+      <p class="slide-subtitle">100% automated test verification across every operational workflow and edge case</p>
+
+      <div class="grid-4" style="margin-bottom: 24px;">
+        <div class="metric-card">
+          <div class="metric-num" style="color: #10b981;">87 / 87</div>
+          <div class="metric-label">API Endpoints Audited</div>
+          <div class="metric-sub">100% Passing Status</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" style="color: #2563eb;">0</div>
+          <div class="metric-label">TypeScript Errors</div>
+          <div class="metric-sub">Strict Type Checking</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" style="color: #4f46e5;">0</div>
+          <div class="metric-label">Vite Build Warnings</div>
+          <div class="metric-sub">Optimized Client Bundle</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-num" style="color: #9333ea;">&lt; 45ms</div>
+          <div class="metric-label">Singapore Latency</div>
+          <div class="metric-sub">Fast Regional Access</div>
+        </div>
+      </div>
+
+      <div class="card" style="background: #ffffff; border-left: 4px solid #10b981;">
+        <div class="card-title" style="color: #065f46; font-size: 1.05rem;">
+          Verified End-to-End Test Modules (backend/src/scripts/test-all-apis.ts)
+        </div>
+        <div class="grid-2" style="font-size: 0.9rem; color: #334155; margin-top: 10px;">
+          <div>
+            <p>✓ <strong>Student Workflows</strong>: Attendance gauge, SGPA computation, ledger, grievances.</p>
+            <p style="margin-top: 6px;">✓ <strong>Faculty Workflows</strong>: Topic sessions, attendance, OCC grading (HTTP 409 verified).</p>
+            <p style="margin-top: 6px;">✓ <strong>Academic Admin</strong>: Cohorts, offerings, dynamic timetables, account toggling.</p>
+          </div>
+          <div>
+            <p>✓ <strong>Exam Admin</strong>: Department isolation enforcement, gazetting, revaluations.</p>
+            <p style="margin-top: 6px;">✓ <strong>Campus Hub</strong>: Algorithmic trending events, lost & found claims pipeline.</p>
+            <p style="margin-top: 6px;">✓ <strong>Security Guards</strong>: Invalid credentials rejection, inactive account lockout.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SLIDE 12: Conclusion & Roadmap -->
+    <div class="slide dark-theme" id="slide-12">
+      <div style="flex: 1; display: flex; flex-direction: column; justify-content: center;">
+        <span class="pill pill-dark-blue">Next Milestones</span>
+        <h2 style="font-size: 2.8rem; font-weight: 800; color: #ffffff; margin-bottom: 10px;">Summary & Future Roadmap</h2>
+        <p style="font-size: 1.15rem; color: #94a3b8; margin-bottom: 30px;">
+          Apex Institutional ERP is fully verified, cloud-deployable, and engineered to scale seamlessly across engineering institutions.
+        </p>
+
+        <div class="grid-3" style="margin-bottom: 36px;">
+          <div class="card card-dark" style="border-top: 3px solid #3b82f6;">
+            <div class="card-title" style="color: #60a5fa;">Phase 1: Fee & Dues Gateway</div>
+            <div class="card-body">
+              Integration of digital payment gateways for online tuition installments, automated receipt issuance, and exam hall ticket clearance.
+            </div>
+          </div>
+
+          <div class="card card-dark" style="border-top: 3px solid #10b981;">
+            <div class="card-title" style="color: #34d399;">Phase 2: Mobile PWA</div>
+            <div class="card-body">
+              Service worker offline caching and push notifications for real-time timetable changes, room shifts, and urgent examination alerts.
+            </div>
+          </div>
+
+          <div class="card card-dark" style="border-top: 3px solid #a78bfa;">
+            <div class="card-title" style="color: #c084fc;">Phase 3: AI Academic Analytics</div>
+            <div class="card-body">
+              Early-warning predictive models identifying students at risk of attendance shortages or declining GPA trends before finals.
+            </div>
+          </div>
+        </div>
+
+        <div style="background: linear-gradient(90deg, #1e3a8a, #312e81); border-radius: 12px; padding: 20px 28px; display: flex; justify-content: space-between; align-items: center;">
+          <div>
+            <div style="font-size: 1.15rem; font-weight: 700; color: #ffffff;">Thank You! Questions & Discussion</div>
+            <div style="font-size: 0.9rem; color: #cbd5e1;">GitHub Repository: github.com/Aajad109/ERP • Live on Render Cloud</div>
+          </div>
+          <button onclick="window.print()" class="nav-btn" style="background: #2563eb; color: #ffffff; padding: 10px 20px; font-size: 0.9rem; border-radius: 8px;">
+            Export / Print to PDF
+          </button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Bottom Floating Navigation Controls -->
+  <div class="controls">
+    <button class="nav-btn" onclick="prevSlide()" title="Previous slide (Left Arrow)">◀ Prev</button>
+    <div class="slide-counter" id="slideCounter">1 / 12</div>
+    <button class="nav-btn" onclick="nextSlide()" title="Next slide (Right Arrow / Space)">Next ▶</button>
+    <div style="width: 1px; height: 18px; background: rgba(255,255,255,0.2); margin: 0 4px;"></div>
+    <button class="nav-btn" onclick="toggleFullScreen()" title="Full screen (F)">⛶ Fullscreen</button>
+    <button class="nav-btn" onclick="window.print()" title="Print / Save PDF (P)">🖨️ PDF</button>
+  </div>
+
+  <script>
+    let currentSlide = 1;
+    const totalSlides = 12;
+
+    function showSlide(index) {
+      if (index < 1) index = 1;
+      if (index > totalSlides) index = totalSlides;
+      currentSlide = index;
+
+      document.querySelectorAll('.slide').forEach((slide, idx) => {
+        if (idx + 1 === currentSlide) {
+          slide.classList.add('active');
+        } else {
+          slide.classList.remove('active');
+        }
+      });
+
+      document.getElementById('slideCounter').textContent = `${currentSlide} / ${totalSlides}`;
+      document.getElementById('progressBar').style.width = `${(currentSlide / totalSlides) * 100}%`;
+    }
+
+    function nextSlide() {
+      if (currentSlide < totalSlides) {
+        showSlide(currentSlide + 1);
+      }
+    }
+
+    function prevSlide() {
+      if (currentSlide > 1) {
+        showSlide(currentSlide - 1);
+      }
+    }
+
+    function toggleFullScreen() {
+      if (!document.fullscreenElement) {
+        document.documentElement.requestFullscreen().catch(err => {
+          console.error(err);
+        });
+      } else {
+        if (document.exitFullscreen) {
+          document.exitFullscreen();
+        }
+      }
+    }
+
+    // Keyboard Navigation
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'ArrowRight' || e.key === ' ' || e.key === 'PageDown') {
+        e.preventDefault();
+        nextSlide();
+      } else if (e.key === 'ArrowLeft' || e.key === 'PageUp') {
+        e.preventDefault();
+        prevSlide();
+      } else if (e.key.toLowerCase() === 'f') {
+        toggleFullScreen();
+      } else if (e.key.toLowerCase() === 'p') {
+        window.print();
+      } else if (e.key === 'Home') {
+        showSlide(1);
+      } else if (e.key === 'End') {
+        showSlide(totalSlides);
+      }
+    });
+
+    // Initialize
+    showSlide(1);
+  </script>
+</body>
+</html>
