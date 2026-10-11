@@ -5,6 +5,7 @@ import { authenticateToken } from '../../middleware/auth';
 import { requireRole } from '../../middleware/rbac';
 import { logAuditEvent } from '../../middleware/audit';
 import bcrypt from 'bcryptjs';
+import { saveBase64Image } from '../../utils/storage';
 
 export const academicRouter = Router();
 
@@ -1121,6 +1122,7 @@ const createAnnouncementSchema = z.object({
   category: z.enum(['ACADEMIC', 'EXAMINATION', 'CAMPUS', 'URGENT']),
   targetRole: z.enum(['STUDENT', 'FACULTY', 'ACADEMIC_ADMIN', 'EXAM_ADMIN', 'ALL']).optional(),
   departmentId: z.string().uuid().optional().nullable().or(z.literal('')),
+  imageData: z.string().optional(),
 });
 
 academicRouter.post(
@@ -1138,8 +1140,13 @@ academicRouter.post(
         return res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.format() });
       }
 
-      const { title, content, category, targetRole, departmentId } = parsed.data;
+      const { title, content, category, targetRole, departmentId, imageData } = parsed.data;
       const effectiveRole = (!targetRole || targetRole === 'ALL') ? null : targetRole;
+
+      let imageUrl: string | null = null;
+      if (imageData) {
+        imageUrl = saveBase64Image(imageData, 'announcement');
+      }
 
       const announcement = await prisma.announcement.create({
         data: {
@@ -1148,9 +1155,13 @@ academicRouter.post(
           category,
           targetRole: effectiveRole,
           departmentId: departmentId || null,
+          imageUrl,
           createdById: req.user!.id,
         },
-        include: { createdBy: { select: { id: true, name: true, role: true } } },
+        include: {
+          createdBy: { select: { id: true, name: true, role: true } },
+          department: true,
+        },
       });
 
       return res.status(201).json({ message: 'Announcement created successfully', announcement });

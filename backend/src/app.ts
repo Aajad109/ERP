@@ -18,6 +18,7 @@ app.use(express.json({ limit: '10mb' }));
 
 // Serve static uploads
 app.use('/uploads', express.static(path.join(__dirname, '../public/uploads')));
+app.use('/api/uploads', express.static(path.join(__dirname, '../public/uploads')));
 
 // Health Check
 app.get('/health', (req: Request, res: Response) => {

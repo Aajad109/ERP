@@ -142,7 +142,18 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
     content: '',
     category: 'ACADEMIC' as 'ACADEMIC' | 'EXAMINATION' | 'CAMPUS' | 'URGENT',
     targetRole: 'ALL',
+    imageData: '',
   });
+
+  // Timetable Hierarchy Filtering State
+  const [timetableDeptFilter, setTimetableDeptFilter] = useState<string>('ALL');
+  const [timetableBatchFilter, setTimetableBatchFilter] = useState<string>('ALL');
+  const [timetableSectionFilter, setTimetableSectionFilter] = useState<string>('ALL');
+
+  // Timetable Hierarchy Creation State (Slot Schedule Form)
+  const [slotDeptFilter, setSlotDeptFilter] = useState<string>('ALL');
+  const [slotBatchFilter, setSlotBatchFilter] = useState<string>('ALL');
+  const [slotSectionFilter, setSlotSectionFilter] = useState<string>('ALL');
 
   // Account Status Filtering & Toggling State
   const [studentFilterStatus, setStudentFilterStatus] = useState<'ALL' | 'ACTIVE' | 'DEACTIVATED'>('ALL');
@@ -391,6 +402,13 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
   // 7. Create Timetable Slot
   const handleCreateTimetableSlot = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!newSlot.offeringId) {
+      setFeedback({
+        type: 'error',
+        text: 'Please select a valid Course Offering for the designated Branch, Academic Batch, and Section.',
+      });
+      return;
+    }
     try {
       setFeedback(null);
       await api.createTimetableSlot(newSlot);
@@ -426,14 +444,18 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
     e.preventDefault();
     try {
       setFeedback(null);
-      await api.createAnnouncement({
+      const res = await api.createAnnouncement({
         title: newAnnouncement.title,
         content: newAnnouncement.content,
         category: newAnnouncement.category,
         targetRole: newAnnouncement.targetRole !== 'ALL' ? newAnnouncement.targetRole : undefined,
+        imageData: newAnnouncement.imageData || undefined,
       });
-      setFeedback({ type: 'success', text: 'Official institutional announcement published successfully!' });
-      setNewAnnouncement({ title: '', content: '', category: 'ACADEMIC', targetRole: 'ALL' });
+      setFeedback({ type: 'success', text: 'Official institutional announcement published successfully! Broadcast across all portals.' });
+      setNewAnnouncement({ title: '', content: '', category: 'ACADEMIC', targetRole: 'ALL', imageData: '' });
+      if (res?.announcement) {
+        setAnnouncements((prev) => [res.announcement, ...prev]);
+      }
       loadAllAcademicData();
     } catch (err: any) {
       setFeedback({ type: 'error', text: err.data?.message || err.message });
@@ -1792,29 +1814,215 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
         {/* TAB: OFFICIAL TIMETABLE */}
         {activeTab === 'timetable' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Calendar className="h-5 w-5 text-indigo-600" />
-                Schedule Official Timetable Slot
-              </h2>
-              <p className="text-xs text-slate-500">
-                Allocate room and time slots for course offerings. Automated collision detection prevents room double-booking.
-              </p>
+            {/* Timetable Branch, Academic Batch, and Section Filter Bar */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-5 space-y-3">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-2 border-b border-slate-100 pb-3">
+                <div className="flex items-center gap-2">
+                  <Calendar className="h-5 w-5 text-indigo-600" />
+                  <h2 className="text-base font-bold text-slate-900">Institutional Timetable Hierarchy Filters</h2>
+                </div>
+                <div className="text-xs text-slate-500">
+                  Separated and organized by Branch (Department), Academic Cohort, and Section
+                </div>
+              </div>
 
-              <form onSubmit={handleCreateTimetableSlot} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+              <div className="grid grid-cols-1 sm:grid-cols-4 gap-4 text-xs pt-1">
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Course Offering *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Branch (Department)</label>
                   <select
-                    value={newSlot.offeringId}
-                    onChange={(e) => setNewSlot({ ...newSlot, offeringId: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                    value={timetableDeptFilter}
+                    onChange={(e) => setTimetableDeptFilter(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 font-semibold bg-white"
                   >
-                    {offerings.map((o) => (
-                      <option key={o.id} value={o.id}>
-                        {o.course?.code} ({o.batch?.name} Sec {o.section?.name})
+                    <option value="ALL">All Branches / Departments</option>
+                    {departments.map((d) => (
+                      <option key={d.id} value={d.code}>
+                        {d.name} ({d.code})
                       </option>
                     ))}
                   </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Academic Batch</label>
+                  <select
+                    value={timetableBatchFilter}
+                    onChange={(e) => setTimetableBatchFilter(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 font-semibold bg-white"
+                  >
+                    <option value="ALL">All Academic Batches</option>
+                    {batches.map((b) => (
+                      <option key={b.id} value={b.id}>
+                        Batch {b.name} ({b.startYear}–{b.endYear})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Section</label>
+                  <select
+                    value={timetableSectionFilter}
+                    onChange={(e) => setTimetableSectionFilter(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 font-semibold bg-white"
+                  >
+                    <option value="ALL">All Sections (A, B, C, D)</option>
+                    <option value="A">Section A</option>
+                    <option value="B">Section B</option>
+                    <option value="C">Section C</option>
+                    <option value="D">Section D</option>
+                  </select>
+                </div>
+
+                <div className="flex items-end">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setTimetableDeptFilter('ALL');
+                      setTimetableBatchFilter('ALL');
+                      setTimetableSectionFilter('ALL');
+                    }}
+                    className="w-full py-2.5 px-4 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold text-xs transition"
+                  >
+                    Reset Hierarchy Filters
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Schedule Slot Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div>
+                <h3 className="text-sm font-bold text-slate-900 flex items-center gap-2">
+                  <PlusCircle className="h-4 w-4 text-indigo-600" />
+                  Schedule New Timetable Slot
+                </h3>
+                <p className="text-xs text-slate-500 mt-1">
+                  Select the Department/Branch, Academic Year Cohort, and Section to allocate timetable periods and classroom assignments.
+                </p>
+              </div>
+
+              {/* Hierarchy Selection Bar for New Slot */}
+              <div className="p-4 bg-indigo-50/50 rounded-xl border border-indigo-100 space-y-3">
+                <div className="text-[11px] font-bold text-indigo-900 uppercase tracking-wider">
+                  Target Hierarchy (Branch, Academic Year &amp; Section)
+                </div>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 text-xs">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Target Branch (Department)</label>
+                    <select
+                      value={slotDeptFilter}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSlotDeptFilter(val);
+                        // Also pre-select matching offering if available
+                        const matching = offerings.filter((o) => {
+                          const deptMatch = val === 'ALL' || o.course?.departmentId === val || o.course?.department?.code === val;
+                          const batchMatch = slotBatchFilter === 'ALL' || o.batchId === slotBatchFilter || o.batch?.id === slotBatchFilter;
+                          const secMatch = slotSectionFilter === 'ALL' || o.section?.name === slotSectionFilter;
+                          return deptMatch && batchMatch && secMatch;
+                        });
+                        if (matching.length > 0) {
+                          setNewSlot((prev) => ({ ...prev, offeringId: matching[0].id }));
+                        }
+                      }}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs bg-white font-medium"
+                    >
+                      <option value="ALL">All Branches / Departments</option>
+                      {departments.map((d) => (
+                        <option key={d.id} value={d.code}>
+                          {d.name} ({d.code})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Target Academic Year / Batch</label>
+                    <select
+                      value={slotBatchFilter}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSlotBatchFilter(val);
+                        const matching = offerings.filter((o) => {
+                          const deptMatch = slotDeptFilter === 'ALL' || o.course?.departmentId === slotDeptFilter || o.course?.department?.code === slotDeptFilter;
+                          const batchMatch = val === 'ALL' || o.batchId === val || o.batch?.id === val;
+                          const secMatch = slotSectionFilter === 'ALL' || o.section?.name === slotSectionFilter;
+                          return deptMatch && batchMatch && secMatch;
+                        });
+                        if (matching.length > 0) {
+                          setNewSlot((prev) => ({ ...prev, offeringId: matching[0].id }));
+                        }
+                      }}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs bg-white font-medium"
+                    >
+                      <option value="ALL">All Academic Batches</option>
+                      {batches.map((b) => (
+                        <option key={b.id} value={b.id}>
+                          Batch {b.name} ({b.startYear}–{b.endYear})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Target Section</label>
+                    <select
+                      value={slotSectionFilter}
+                      onChange={(e) => {
+                        const val = e.target.value;
+                        setSlotSectionFilter(val);
+                        const matching = offerings.filter((o) => {
+                          const deptMatch = slotDeptFilter === 'ALL' || o.course?.departmentId === slotDeptFilter || o.course?.department?.code === slotDeptFilter;
+                          const batchMatch = slotBatchFilter === 'ALL' || o.batchId === slotBatchFilter || o.batch?.id === slotBatchFilter;
+                          const secMatch = val === 'ALL' || o.section?.name === val;
+                          return deptMatch && batchMatch && secMatch;
+                        });
+                        if (matching.length > 0) {
+                          setNewSlot((prev) => ({ ...prev, offeringId: matching[0].id }));
+                        }
+                      }}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs bg-white font-medium"
+                    >
+                      <option value="ALL">All Sections (A, B, C, D)</option>
+                      <option value="A">Section A</option>
+                      <option value="B">Section B</option>
+                      <option value="C">Section C</option>
+                      <option value="D">Section D</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+
+              <form onSubmit={handleCreateTimetableSlot} className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-4 text-xs">
+                <div className="sm:col-span-2 lg:col-span-1">
+                  <label className="block font-bold text-slate-700 mb-1">Course Offering *</label>
+                  {(() => {
+                    const matchingOfferings = offerings.filter((o) => {
+                      const deptMatch = slotDeptFilter === 'ALL' || o.course?.departmentId === slotDeptFilter || o.course?.department?.code === slotDeptFilter;
+                      const batchMatch = slotBatchFilter === 'ALL' || o.batchId === slotBatchFilter || o.batch?.id === slotBatchFilter;
+                      const secMatch = slotSectionFilter === 'ALL' || o.section?.name === slotSectionFilter;
+                      return deptMatch && batchMatch && secMatch;
+                    });
+
+                    return (
+                      <select
+                        value={newSlot.offeringId}
+                        onChange={(e) => setNewSlot({ ...newSlot, offeringId: e.target.value })}
+                        className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs bg-white font-medium"
+                      >
+                        {matchingOfferings.length === 0 ? (
+                          <option value="">No offerings for selected filters</option>
+                        ) : (
+                          matchingOfferings.map((o) => (
+                            <option key={o.id} value={o.id}>
+                              [{o.course?.department?.code || 'CSE'}] {o.course?.code} — {o.course?.title} ({o.batch?.name} Sec {o.section?.name})
+                            </option>
+                          ))
+                        )}
+                      </select>
+                    );
+                  })()}
                 </div>
 
                 <div>
@@ -1822,7 +2030,7 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                   <select
                     value={newSlot.dayOfWeek}
                     onChange={(e) => setNewSlot({ ...newSlot, dayOfWeek: e.target.value as any })}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-bold"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs font-bold bg-white"
                   >
                     <option value="MON">Monday</option>
                     <option value="TUE">Tuesday</option>
@@ -1834,29 +2042,29 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Start Time *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Start Time (Slot Start) *</label>
                   <input
                     type="time"
                     required
                     value={newSlot.startTime}
                     onChange={(e) => setNewSlot({ ...newSlot, startTime: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">End Time *</label>
+                  <label className="block font-bold text-slate-700 mb-1">End Time (Slot End) *</label>
                   <input
                     type="time"
                     required
                     value={newSlot.endTime}
                     onChange={(e) => setNewSlot({ ...newSlot, endTime: e.target.value })}
-                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono font-bold"
                   />
                 </div>
 
                 <div>
-                  <label className="block font-bold text-slate-700 mb-1">Room Number *</label>
+                  <label className="block font-bold text-slate-700 mb-1">Classroom / Hall *</label>
                   <input
                     type="text"
                     required
@@ -1879,38 +2087,124 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
               </form>
             </div>
 
-            {/* Scheduled Slots Matrix */}
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h3 className="text-base font-bold text-slate-900">Institutional Weekly Timetable Matrix</h3>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
-                      <th className="py-3 px-4">Day</th>
-                      <th className="py-3 px-4">Time Window</th>
-                      <th className="py-3 px-4">Room</th>
-                      <th className="py-3 px-4">Course Code & Title</th>
-                      <th className="py-3 px-4">Section</th>
-                      <th className="py-3 px-4">Assigned Instructor</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {timetableSlots.map((s) => (
-                      <tr key={s.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-bold text-indigo-700">{s.dayOfWeek}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-slate-800">{s.startTime} – {s.endTime}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900 bg-slate-50/50">{s.roomNumber}</td>
-                        <td className="py-3 px-4 font-semibold text-slate-900">{s.offering?.course?.code} — {s.offering?.course?.title}</td>
-                        <td className="py-3 px-4 text-slate-600">Sec {s.offering?.section?.name}</td>
-                        <td className="py-3 px-4 text-slate-700">
-                          {s.offering?.teachingAssignments?.[0]?.faculty?.name || 'Dr. Alan Turing'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
+            {/* Hierarchical Timetable Matrix Display */}
+            {(() => {
+              const filteredSlots = timetableSlots.filter((s) => {
+                const deptCode = s.offering?.course?.department?.code;
+                const deptId = s.offering?.course?.departmentId || s.offering?.course?.department?.id;
+                if (timetableDeptFilter !== 'ALL' && deptCode !== timetableDeptFilter && deptId !== timetableDeptFilter) {
+                  return false;
+                }
+                const batchId = s.offering?.batchId || s.offering?.batch?.id;
+                if (timetableBatchFilter !== 'ALL' && batchId !== timetableBatchFilter) {
+                  return false;
+                }
+                const sectionName = s.offering?.section?.name;
+                if (timetableSectionFilter !== 'ALL' && sectionName !== timetableSectionFilter) {
+                  return false;
+                }
+                return true;
+              });
+
+              // Group filtered slots by: Branch -> Batch -> Section
+              const groups: { [key: string]: any[] } = {};
+              filteredSlots.forEach((s) => {
+                const dept = s.offering?.course?.department?.name || 'Computer Science and Engineering';
+                const deptCode = s.offering?.course?.department?.code || 'CSE';
+                const batchName = s.offering?.batch?.name || '2024-2028';
+                const secName = s.offering?.section?.name || 'A';
+                const groupKey = `${deptCode} • Batch ${batchName} • Section ${secName}`;
+                if (!groups[groupKey]) {
+                  groups[groupKey] = [];
+                }
+                groups[groupKey].push(s);
+              });
+
+              const groupKeys = Object.keys(groups);
+
+              return (
+                <div className="space-y-6">
+                  <div className="flex justify-between items-center">
+                    <h3 className="text-base font-bold text-slate-900">
+                      Weekly Timetable Schedules ({filteredSlots.length} active slots across {groupKeys.length} cohorts)
+                    </h3>
+                    <span className="text-xs text-indigo-600 font-semibold">Organized by Branch &amp; Section</span>
+                  </div>
+
+                  {groupKeys.length === 0 ? (
+                    <div className="p-8 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                      No timetable slots scheduled matching the selected Branch, Batch, or Section filters.
+                    </div>
+                  ) : (
+                    groupKeys.map((groupKey) => {
+                      const groupSlots = groups[groupKey];
+                      // Sort by Day of Week order and Start Time
+                      const dayOrder: { [d: string]: number } = { MON: 1, TUE: 2, WED: 3, THU: 4, FRI: 5, SAT: 6 };
+                      const sortedSlots = [...groupSlots].sort((a, b) => {
+                        const dayDiff = (dayOrder[a.dayOfWeek] || 99) - (dayOrder[b.dayOfWeek] || 99);
+                        if (dayDiff !== 0) return dayDiff;
+                        return a.startTime.localeCompare(b.startTime);
+                      });
+
+                      return (
+                        <div key={groupKey} className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden">
+                          <div className="bg-gradient-to-r from-slate-900 to-indigo-950 text-white px-5 py-3 flex flex-col sm:flex-row justify-between sm:items-center gap-2">
+                            <div className="flex items-center gap-2">
+                              <span className="px-2.5 py-0.5 rounded font-black text-xs bg-indigo-500/30 text-indigo-200 border border-indigo-400/30">
+                                {groupKey.split(' • ')[0]}
+                              </span>
+                              <span className="font-bold text-sm text-white">
+                                {groupKey.split(' • ').slice(1).join(' — ')}
+                              </span>
+                            </div>
+                            <span className="text-xs text-slate-300 font-mono">
+                              {sortedSlots.length} Scheduled Periods
+                            </span>
+                          </div>
+
+                          <div className="overflow-x-auto">
+                            <table className="w-full text-left text-xs border-collapse">
+                              <thead>
+                                <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                                  <th className="py-3 px-4">Day of Week</th>
+                                  <th className="py-3 px-4">Timing Window</th>
+                                  <th className="py-3 px-4">Room / Hall</th>
+                                  <th className="py-3 px-4">Course Code &amp; Title</th>
+                                  <th className="py-3 px-4">Assigned Instructor</th>
+                                </tr>
+                              </thead>
+                              <tbody className="divide-y divide-slate-100">
+                                {sortedSlots.map((s) => (
+                                  <tr key={s.id} className="hover:bg-slate-50">
+                                    <td className="py-3 px-4">
+                                      <span className="px-2 py-0.5 rounded font-bold text-xs bg-indigo-50 text-indigo-700 border border-indigo-100">
+                                        {s.dayOfWeek}
+                                      </span>
+                                    </td>
+                                    <td className="py-3 px-4 font-mono font-bold text-slate-800">
+                                      {s.startTime} – {s.endTime}
+                                    </td>
+                                    <td className="py-3 px-4 font-bold text-slate-900 bg-slate-50/50">
+                                      {s.roomNumber}
+                                    </td>
+                                    <td className="py-3 px-4 font-semibold text-slate-900">
+                                      {s.offering?.course?.code} — {s.offering?.course?.title}
+                                    </td>
+                                    <td className="py-3 px-4 text-slate-700">
+                                      {s.offering?.teachingAssignments?.[0]?.faculty?.name || 'Dr. Alan Turing'}
+                                    </td>
+                                  </tr>
+                                ))}
+                              </tbody>
+                            </table>
+                          </div>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              );
+            })()}
           </div>
         )}
 
@@ -2027,11 +2321,14 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                 <Bell className="h-5 w-5 text-indigo-600" />
                 Publish Institutional Announcement
               </h2>
+              <p className="text-xs text-slate-500">
+                Official notices broadcast across the student, faculty, and administrative portals.
+              </p>
 
               <form onSubmit={handleCreateAnnouncement} className="space-y-4 text-xs">
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                  <div>
-                    <label className="block font-bold text-slate-700 mb-1">Title *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                  <div className="sm:col-span-2">
+                    <label className="block font-bold text-slate-700 mb-1">Notice Headline *</label>
                     <input
                       type="text"
                       required
@@ -2047,13 +2344,62 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                     <select
                       value={newAnnouncement.category}
                       onChange={(e) => setNewAnnouncement({ ...newAnnouncement, category: e.target.value as any })}
-                      className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-semibold"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-semibold bg-white"
                     >
                       <option value="ACADEMIC">ACADEMIC</option>
                       <option value="EXAMINATION">EXAMINATION</option>
                       <option value="CAMPUS">CAMPUS</option>
                       <option value="URGENT">URGENT</option>
                     </select>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Audience Scope</label>
+                    <select
+                      value={newAnnouncement.targetRole}
+                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, targetRole: e.target.value })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-semibold bg-white"
+                    >
+                      <option value="ALL">Entire Campus (All Users)</option>
+                      <option value="STUDENT">Students Only</option>
+                      <option value="FACULTY">Faculty Only</option>
+                      <option value="EXAM_ADMIN">Examination Authorities Only</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Upload Notification Image / Circular</label>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onloadend = () => {
+                            setNewAnnouncement({ ...newAnnouncement, imageData: reader.result as string });
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                      className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-indigo-50 file:text-indigo-700 hover:file:bg-indigo-100"
+                    />
+                    {newAnnouncement.imageData && (
+                      <div className="mt-2 flex items-center gap-3">
+                        <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
+                          <img src={newAnnouncement.imageData} alt="Preview" className="w-full h-full object-cover" />
+                        </div>
+                        <button
+                          type="button"
+                          onClick={() => setNewAnnouncement({ ...newAnnouncement, imageData: '' })}
+                          className="text-xs text-rose-600 hover:underline font-semibold"
+                        >
+                          Remove Image
+                        </button>
+                      </div>
+                    )}
                   </div>
                 </div>
 
@@ -2072,12 +2418,72 @@ export const AcademicAdminDashboard: React.FC<AcademicAdminDashboardProps> = ({
                 <div className="flex justify-end">
                   <button
                     type="submit"
-                    className="px-6 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm"
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2"
                   >
-                    + Publish Notice
+                    <Send className="h-4 w-4" />
+                    Publish Institutional Notice
                   </button>
                 </div>
               </form>
+            </div>
+
+            {/* Active Notices Feed */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex justify-between items-center">
+                <h3 className="text-base font-bold text-slate-900">Active Notice Board ({announcements.length})</h3>
+                <span className="text-xs text-indigo-600 font-semibold">Broadcast Across All Portals</span>
+              </div>
+              <div className="space-y-4">
+                {announcements.map((ann) => (
+                  <div key={ann.id} className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <div className="flex items-center gap-2">
+                        <span
+                          className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                            ann.category === 'URGENT'
+                              ? 'bg-rose-100 text-rose-800'
+                              : ann.category === 'EXAMINATION'
+                              ? 'bg-amber-100 text-amber-800'
+                              : ann.category === 'CAMPUS'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-indigo-100 text-indigo-800'
+                          }`}
+                        >
+                          {ann.category}
+                        </span>
+                        {ann.targetRole && (
+                          <span className="bg-slate-200 text-slate-700 font-semibold px-2 py-0.5 rounded text-[10px]">
+                            {ann.targetRole}
+                          </span>
+                        )}
+                      </div>
+                      <span className="text-slate-400 font-mono text-[11px]">{new Date(ann.createdAt).toLocaleString()}</span>
+                    </div>
+
+                    <h4 className="text-sm font-bold text-slate-900">{ann.title}</h4>
+
+                    {ann.imageUrl && (
+                      <div className="rounded-lg overflow-hidden max-h-72 w-full bg-slate-100 border border-slate-200">
+                        <img
+                          src={ann.imageUrl}
+                          alt={ann.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{ann.content}</p>
+
+                    <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-200 flex justify-between items-center">
+                      <span>Published by: {ann.createdBy?.name || 'Academic Administration'} • {ann.createdBy?.role || 'ACADEMIC_ADMIN'}</span>
+                      <span className="text-emerald-600 font-bold">Active &amp; Visible to All</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}

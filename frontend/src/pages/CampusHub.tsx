@@ -89,30 +89,33 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
     }
   }, [activeTab, eventCategoryFilter, itemTypeFilter]);
 
-  const loadEvents = async () => {
+  const loadEvents = async (categoryOverride?: string) => {
     try {
       setLoadingEvents(true);
+      const targetCategory = categoryOverride !== undefined ? categoryOverride : eventCategoryFilter;
       const res = await api.getCampusEvents({
-        category: eventCategoryFilter !== 'ALL' ? eventCategoryFilter : undefined,
+        category: targetCategory !== 'ALL' ? targetCategory : undefined,
       });
       setEvents(res.events || []);
     } catch (err: any) {
-      console.error(err);
+      console.error('Failed to load events:', err);
     } finally {
       setLoadingEvents(false);
     }
   };
 
-  const loadItems = async () => {
+  const loadItems = async (typeOverride?: string, searchOverride?: string) => {
     try {
       setLoadingItems(true);
+      const targetType = typeOverride !== undefined ? typeOverride : itemTypeFilter;
+      const targetSearch = searchOverride !== undefined ? searchOverride : itemSearch;
       const res = await api.getLostAndFoundItems({
-        type: itemTypeFilter !== 'ALL' ? itemTypeFilter : undefined,
-        search: itemSearch || undefined,
+        type: targetType !== 'ALL' ? targetType : undefined,
+        search: targetSearch && targetSearch.trim() !== '' ? targetSearch.trim() : undefined,
       });
       setItems(res.items || []);
     } catch (err: any) {
-      console.error(err);
+      console.error('Failed to load lost and found items:', err);
     } finally {
       setLoadingItems(false);
     }
@@ -197,8 +200,9 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
         eventDate: '',
         bannerData: '',
       });
-      setNotification({ type: 'success', text: 'Campus event created successfully!' });
-      loadEvents();
+      setNotification({ type: 'success', text: 'Campus event created successfully! It is now live on the trending board.' });
+      setEventCategoryFilter('ALL');
+      await loadEvents('ALL');
     } catch (err: any) {
       alert(err.data?.message || err.message);
     } finally {
@@ -213,7 +217,7 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
     e.preventDefault();
     try {
       setSubmittingItem(true);
-      await api.reportLostAndFoundItem(newItem);
+      const res = await api.reportLostAndFoundItem(newItem);
       setShowReportItemModal(false);
       setNewItem({
         title: '',
@@ -223,8 +227,13 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
         location: '',
         imageData: '',
       });
-      setNotification({ type: 'success', text: 'Item reported successfully!' });
-      loadItems();
+      setNotification({ type: 'success', text: 'Item reported successfully! The record is now live in the catalog.' });
+      setItemTypeFilter('ALL');
+      setItemSearch('');
+      if (res?.item) {
+        setItems((prev) => [res.item, ...prev.filter((i) => i.id !== res.item.id)]);
+      }
+      await loadItems('ALL', '');
     } catch (err: any) {
       alert(err.data?.message || err.message);
     } finally {
@@ -358,13 +367,15 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
               ))}
             </div>
 
-            <button
-              onClick={() => setShowCreateEventModal(true)}
-              className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
-            >
-              <PlusCircle className="h-4 w-4 mr-1.5" />
-              Host Campus Event
-            </button>
+            {currentUser?.role !== 'STUDENT' && (
+              <button
+                onClick={() => setShowCreateEventModal(true)}
+                className="inline-flex items-center px-4 py-2 bg-orange-600 hover:bg-orange-700 text-white rounded-lg text-xs font-bold shadow-sm transition"
+              >
+                <PlusCircle className="h-4 w-4 mr-1.5" />
+                Host Campus Event
+              </button>
+            )}
           </div>
 
           {/* Events Grid */}
@@ -514,16 +525,34 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
               </div>
 
               {/* Search Bar */}
-              <div className="relative flex-1 sm:w-64">
-                <Search className="h-4 w-4 absolute left-3 top-2.5 text-slate-400" />
+              <div className="relative flex-1 sm:w-64 flex items-center">
+                <Search className="h-4 w-4 absolute left-3 text-slate-400 pointer-events-none" />
                 <input
                   type="text"
                   placeholder="Search item, location..."
                   value={itemSearch}
-                  onChange={(e) => setItemSearch(e.target.value)}
-                  onKeyDown={(e) => e.key === 'Enter' && loadItems()}
-                  className="w-full text-xs pl-9 pr-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500"
+                  onChange={(e) => {
+                    const val = e.target.value;
+                    setItemSearch(val);
+                    if (val === '') {
+                      loadItems(itemTypeFilter, '');
+                    }
+                  }}
+                  onKeyDown={(e) => e.key === 'Enter' && loadItems(itemTypeFilter, itemSearch)}
+                  className="w-full text-xs pl-9 pr-8 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-amber-500"
                 />
+                {itemSearch && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setItemSearch('');
+                      loadItems(itemTypeFilter, '');
+                    }}
+                    className="absolute right-2.5 text-xs text-slate-400 hover:text-slate-600 font-bold"
+                  >
+                    ✕
+                  </button>
+                )}
               </div>
             </div>
 
@@ -732,6 +761,18 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
                   onChange={(e) => handleImageUpload(e, (b64) => setNewEvent({ ...newEvent, bannerData: b64 }))}
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-orange-50 file:text-orange-700 hover:file:bg-orange-100"
                 />
+                {newEvent.bannerData && (
+                  <div className="mt-2 relative w-32 h-20 rounded-lg overflow-hidden border border-slate-200">
+                    <img src={newEvent.bannerData} alt="Banner Preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setNewEvent({ ...newEvent, bannerData: '' })}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black text-white rounded-full p-1 text-[10px]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-2 pt-2 border-t">
@@ -837,6 +878,18 @@ export const CampusHub: React.FC<CampusHubProps> = ({ currentUser, initialTab = 
                   onChange={(e) => handleImageUpload(e, (b64) => setNewItem({ ...newItem, imageData: b64 }))}
                   className="w-full text-xs text-slate-500 file:mr-3 file:py-1.5 file:px-3 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-amber-50 file:text-amber-700 hover:file:bg-amber-100"
                 />
+                {newItem.imageData && (
+                  <div className="mt-2 relative w-32 h-24 rounded-lg overflow-hidden border border-slate-200">
+                    <img src={newItem.imageData} alt="Item Preview" className="w-full h-full object-cover" />
+                    <button
+                      type="button"
+                      onClick={() => setNewItem({ ...newItem, imageData: '' })}
+                      className="absolute top-1 right-1 bg-black/60 hover:bg-black text-white rounded-full p-1 text-[10px]"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                )}
               </div>
 
               <div className="flex justify-end space-x-2 pt-2 border-t">

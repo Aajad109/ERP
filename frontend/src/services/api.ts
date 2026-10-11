@@ -136,7 +136,13 @@ export const api = {
 
   getStudentResults: (studentId: string) => request<any>(`/results/student/${studentId}`),
   getOfferingResults: (offeringId: string) => request<any>(`/results/offering/${offeringId}`),
+  saveExternalMarks: (offeringId: string, entries: { studentId: string; externalMarks: number }[]) =>
+    request<any>('/results/external-marks', {
+      method: 'POST',
+      body: JSON.stringify({ offeringId, entries }),
+    }),
   getResultHistory: (resultId: string) => request<any>(`/results/${resultId}/history`),
+  getCorrectionRequests: () => request<{ requests: any[] }>('/results/correction-requests'),
   requestCorrection: (resultId: string, reason: string, requestedMarks?: number) =>
     request<any>(`/results/${resultId}/request-correction`, {
       method: 'POST',
@@ -212,7 +218,15 @@ export const api = {
 
   // Phase 2: Campus Hub
   getLostAndFoundItems: (params?: { type?: string; status?: string; category?: string; search?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'ALL' && value !== 'undefined') {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
     return request<any>(`/hub/lost-found${query ? `?${query}` : ''}`);
   },
   reportLostAndFoundItem: (data: {
@@ -244,7 +258,15 @@ export const api = {
     }),
 
   getCampusEvents: (params?: { category?: string; departmentId?: string }) => {
-    const query = new URLSearchParams(params as any).toString();
+    const searchParams = new URLSearchParams();
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        if (value !== undefined && value !== null && value !== '' && value !== 'ALL' && value !== 'undefined') {
+          searchParams.append(key, String(value));
+        }
+      });
+    }
+    const query = searchParams.toString();
     return request<any>(`/hub/events${query ? `?${query}` : ''}`);
   },
   createCampusEvent: (data: {

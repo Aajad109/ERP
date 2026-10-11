@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { api } from '../services/api';
 import { PortalLayout, NavItem } from '../components/PortalLayout';
+import { CampusHub } from './CampusHub';
 import {
   LayoutDashboard,
   Sliders,
@@ -24,7 +25,10 @@ import {
   GitCommit,
   ShieldAlert,
   Save,
-  Send
+  Send,
+  Bell,
+  Flame,
+  Tag
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -87,8 +91,26 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
   const [extMarksStudentId, setExtMarksStudentId] = useState<string>('');
   const [extMarksScore, setExtMarksScore] = useState<number>(50);
   const [intMarksScore, setIntMarksScore] = useState<number>(35);
+  const [externalMarksInputMap, setExternalMarksInputMap] = useState<Record<string, number | string>>({});
+  const [savingExternalMarks, setSavingExternalMarks] = useState<boolean>(false);
 
   const [notification, setNotification] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
+  const [correctionRequests, setCorrectionRequests] = useState<any[]>([]);
+  const [announcements, setAnnouncements] = useState<any[]>([]);
+
+  // Correction Authorization State
+  const [selectedCorrectionForApprove, setSelectedCorrectionForApprove] = useState<any>(null);
+  const [adminApproveReason, setAdminApproveReason] = useState<string>('Authorized and gazetted by designated Examination Admin');
+  const [submittingApproval, setSubmittingApproval] = useState<boolean>(false);
+
+  // Announcement Creation
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: '',
+    content: '',
+    category: 'EXAMINATION' as 'ACADEMIC' | 'EXAMINATION' | 'CAMPUS' | 'URGENT',
+    imageData: '',
+  });
+  const [submittingAnnouncement, setSubmittingAnnouncement] = useState<boolean>(false);
 
   const designatedDeptCode = currentUser?.examAdminDesignation?.department?.code || 'CSE';
   const designatedDeptName = currentUser?.examAdminDesignation?.department?.name || 'Computer Science and Engineering';
@@ -100,10 +122,12 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
   const loadExamAdminData = async () => {
     try {
       setLoading(true);
-      const [offRes, revalRes, auditRes] = await Promise.all([
+      const [offRes, revalRes, auditRes, corrRes, annRes] = await Promise.all([
         api.getOfferings(),
         api.getRevaluationRequests().catch(() => ({ requests: [] })),
         api.getAuditLogs().catch(() => ({ logs: [] })),
+        api.getCorrectionRequests().catch(() => ({ requests: [] })),
+        api.getAnnouncements().catch(() => ({ announcements: [] })),
       ]);
 
       const allOfferings = offRes.offerings || [];
@@ -116,6 +140,8 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
       setOfferings(activeList);
       setRevaluationRequests(revalRes.requests || []);
       setAuditLogs(auditRes.logs || []);
+      setCorrectionRequests(corrRes.requests || []);
+      setAnnouncements(annRes.announcements || []);
 
       if (activeList.length > 0) {
         setSelectedOfferingId(activeList[0].id);
@@ -125,6 +151,46 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
       setNotification({ type: 'error', text: 'Failed to load examination admin data' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleApproveCorrection = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!selectedCorrectionForApprove) return;
+    try {
+      setSubmittingApproval(true);
+      await api.examAdminApproveCorrection(selectedCorrectionForApprove.id, adminApproveReason);
+      setNotification({
+        type: 'success',
+        text: 'Faculty-proposed mark correction authorized and published! Version incremented, immutable history ledger updated, and student records updated.',
+      });
+      setSelectedCorrectionForApprove(null);
+      loadExamAdminData();
+      if (selectedOfferingId) {
+        loadOfferingResults(selectedOfferingId);
+      }
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSubmittingApproval(false);
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSubmittingAnnouncement(true);
+      const res = await api.createAnnouncement(newAnnouncement);
+      setNotification({ type: 'success', text: 'Official examination notification published successfully! Visible across all portals.' });
+      setNewAnnouncement({ title: '', content: '', category: 'EXAMINATION', imageData: '' });
+      if (res?.announcement) {
+        setAnnouncements((prev) => [res.announcement, ...prev]);
+      }
+      loadExamAdminData();
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSubmittingAnnouncement(false);
     }
   };
 
@@ -138,11 +204,59 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
     try {
       setLoading(true);
       const res = await api.getOfferingResults(offeringId);
-      setResults(res.results || []);
+      const fetchedResults = res.results || [];
+      setResults(fetchedResults);
+      const initialMap: Record<string, number | string> = {};
+      fetchedResults.forEach((r: any) => {
+        initialMap[r.studentId] = r.externalMarks ?? 0;
+      });
+      setExternalMarksInputMap(initialMap);
     } catch (err: any) {
       console.error(err);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleSaveAllExternalMarks = async () => {
+    if (!selectedOfferingId) return;
+    try {
+      setSavingExternalMarks(true);
+      setNotification(null);
+      const entries = results.map((r) => ({
+        studentId: r.studentId,
+        externalMarks: Math.max(0, Math.min(60, Number(externalMarksInputMap[r.studentId] ?? r.externalMarks ?? 0))),
+      }));
+      const res = await api.saveExternalMarks(selectedOfferingId, entries);
+      setNotification({
+        type: 'success',
+        text: res.message || 'External examination marks successfully recorded! Grades, GPA, and student totals updated.',
+      });
+      await loadOfferingResults(selectedOfferingId);
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSavingExternalMarks(false);
+    }
+  };
+
+  const handleSaveSingleExternalMark = async (studentId: string) => {
+    if (!selectedOfferingId) return;
+    try {
+      setSavingExternalMarks(true);
+      setNotification(null);
+      const mark = Math.max(0, Math.min(60, Number(externalMarksInputMap[studentId] ?? 0)));
+      const entries = [{ studentId, externalMarks: mark }];
+      const res = await api.saveExternalMarks(selectedOfferingId, entries);
+      setNotification({
+        type: 'success',
+        text: `External mark saved (${mark} / 60) for student! Official totals and grades updated.`,
+      });
+      await loadOfferingResults(selectedOfferingId);
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSavingExternalMarks(false);
     }
   };
 
@@ -200,22 +314,6 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
     }
   };
 
-  // Unpublish / Reopen Result
-  const handleTogglePublication = async (resultId: string, currentState: string) => {
-    try {
-      if (currentState === 'PUBLISHED') {
-        await api.unpublishResult(resultId);
-        setNotification({ type: 'success', text: 'Result officially unpublished.' });
-      } else {
-        await api.reopenResult(resultId);
-        setNotification({ type: 'success', text: 'Result officially reopened and gazetted.' });
-      }
-      loadOfferingResults(selectedOfferingId);
-    } catch (err: any) {
-      setNotification({ type: 'error', text: err.data?.message || 'Failed to toggle publication state' });
-    }
-  };
-
   // Publish New Result
   const handlePublishNewResult = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -267,7 +365,7 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
 
   const selectedOffering = offerings.find((o) => o.id === selectedOfferingId);
 
-  // Sidebar Items strictly matching prompt Section 9
+  // Sidebar Items strictly matching prompt Section 9 (with unpublish removed)
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
     { id: 'assessment-config', label: 'Assessment Configuration', icon: Sliders },
@@ -277,13 +375,20 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
     { id: 'calculation', label: 'Result Calculation', icon: Calculator },
     { id: 'validation', label: 'Result Validation', icon: ShieldCheck },
     { id: 'publish', label: 'Publish Results', icon: Upload },
-    { id: 'unpublish', label: 'Reopen / Unpublish', icon: RotateCcw },
-    { id: 'corrections', label: 'Correction Requests', icon: AlertTriangle },
+    {
+      id: 'corrections',
+      label: 'Correction Requests',
+      icon: AlertTriangle,
+      badge: correctionRequests.filter((r) => r.status === 'PROPOSED_BY_FACULTY').length || undefined,
+    },
     { id: 'direct-correction', label: 'Direct Admin Correction (C)', icon: Wrench },
     { id: 'revaluation', label: 'Revaluation Management', icon: RotateCcw, badge: revaluationRequests.length || undefined },
     { id: 'version-history', label: 'Result Version History', icon: History },
     { id: 'audit-logs', label: 'Audit Logs', icon: FileSpreadsheet },
     { id: 'reports', label: 'Examination Reports', icon: FileText },
+    { id: 'announcements', label: 'Announcements', icon: Bell, badge: announcements.length || undefined },
+    { id: 'trending-events', label: 'Trending Events', icon: Flame },
+    { id: 'lost-found', label: 'Lost & Found', icon: Tag },
   ];
 
   return (
@@ -1028,42 +1133,191 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
         {/* TAB: EXTERNAL MARKS ENTRY */}
         {activeTab === 'external-marks' && (
           <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <FileText className="h-5 w-5 text-blue-600" />
-                End-Semester External Marks Administration
-              </h2>
-              <p className="text-xs text-slate-500">
-                Input or adjust end-semester external exam scores (/60). External scores combine with internal marks (/40) for official 100-mark totals.
-              </p>
-              <div className="overflow-x-auto">
-                <table className="w-full text-left text-xs border-collapse">
-                  <thead>
-                    <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
-                      <th className="py-3 px-4">Roll Number</th>
-                      <th className="py-3 px-4">Student Name</th>
-                      <th className="py-3 px-4">Internal (/40)</th>
-                      <th className="py-3 px-4">External (/60)</th>
-                      <th className="py-3 px-4">Current Grade</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-slate-100">
-                    {results.map((r) => (
-                      <tr key={r.id} className="hover:bg-slate-50">
-                        <td className="py-3 px-4 font-mono font-bold text-purple-700">{r.student?.rollNumber}</td>
-                        <td className="py-3 px-4 font-bold text-slate-900">{r.student?.user?.name}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-indigo-600">{r.internalMarks}</td>
-                        <td className="py-3 px-4 font-mono font-bold text-blue-600">{r.externalMarks}</td>
-                        <td className="py-3 px-4">
-                          <span className="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">
-                            {r.grade} ({r.gradePoint} GP)
-                          </span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-5">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-3 border-b border-slate-100 pb-4">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <FileText className="h-5 w-5 text-blue-600" />
+                    End-Semester External Marks Administration
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Input and commit end-semester external exam scores (/60). Combines with faculty internal assessment (/40) to compute statutory 100-mark totals, letter grades, and SGPA.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={handleSaveAllExternalMarks}
+                    disabled={savingExternalMarks || results.length === 0}
+                    className="px-4 py-2 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50 transition"
+                  >
+                    <Save className="h-4 w-4" />
+                    {savingExternalMarks ? 'Saving Marks...' : 'Save All External Marks'}
+                  </button>
+                </div>
               </div>
+
+              {/* Course Offering Selector & Summary Banner */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4 bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs">
+                <div className="md:col-span-2 space-y-1">
+                  <label className="block font-bold text-slate-700">Select Course Offering *</label>
+                  <select
+                    value={selectedOfferingId}
+                    onChange={(e) => setSelectedOfferingId(e.target.value)}
+                    className="w-full border border-slate-300 rounded-lg p-2.5 font-bold text-xs bg-white focus:ring-2 focus:ring-blue-500"
+                  >
+                    {offerings.map((o) => (
+                      <option key={o.id} value={o.id}>
+                        [{o.course?.department?.code || 'CSE'}] {o.course?.code} — {o.course?.title} ({o.batch?.name} • Sec {o.section?.name})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Enrolled Students</div>
+                  <div className="text-lg font-black text-slate-900 font-mono mt-0.5">{results.length}</div>
+                </div>
+
+                <div className="bg-white p-3 rounded-lg border border-slate-200">
+                  <div className="text-[10px] font-bold text-slate-400 uppercase">Marks Recorded</div>
+                  <div className="text-lg font-black text-blue-600 font-mono mt-0.5">
+                    {results.filter((r) => r.externalMarks > 0).length} / {results.length}
+                  </div>
+                </div>
+              </div>
+
+              {results.length === 0 ? (
+                <div className="p-8 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                  No enrolled students found for the selected course offering. Please select another offering.
+                </div>
+              ) : (
+                <div className="overflow-x-auto border border-slate-200 rounded-xl">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-b border-slate-200 text-slate-600 font-bold">
+                        <th className="py-3 px-4">Roll Number</th>
+                        <th className="py-3 px-4">Student Name</th>
+                        <th className="py-3 px-4">Internal Marks (/40)</th>
+                        <th className="py-3 px-4">External Marks (/60)</th>
+                        <th className="py-3 px-4">Live Total (/100)</th>
+                        <th className="py-3 px-4">Projected Grade</th>
+                        <th className="py-3 px-4">Record Status</th>
+                        <th className="py-3 px-4 text-right">Action</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {results.map((r) => {
+                        const currentInput = externalMarksInputMap[r.studentId] !== undefined
+                          ? Number(externalMarksInputMap[r.studentId])
+                          : (r.externalMarks ?? 0);
+                        const internal = Number(r.internalMarks ?? 0);
+                        const liveTotal = Math.round((internal + currentInput) * 100) / 100;
+
+                        let previewGrade = 'F';
+                        let previewGP = 0;
+                        if (liveTotal >= 90) { previewGrade = 'O'; previewGP = 10; }
+                        else if (liveTotal >= 80) { previewGrade = 'A+'; previewGP = 9; }
+                        else if (liveTotal >= 70) { previewGrade = 'A'; previewGP = 8; }
+                        else if (liveTotal >= 60) { previewGrade = 'B+'; previewGP = 7; }
+                        else if (liveTotal >= 50) { previewGrade = 'B'; previewGP = 6; }
+                        else if (liveTotal >= 40) { previewGrade = 'C'; previewGP = 5; }
+
+                        return (
+                          <tr key={r.id || r.studentId} className="hover:bg-slate-50">
+                            <td className="py-3 px-4 font-mono font-bold text-purple-700">
+                              {r.student?.rollNumber}
+                            </td>
+                            <td className="py-3 px-4 font-bold text-slate-900">
+                              {r.student?.user?.name}
+                            </td>
+                            <td className="py-3 px-4">
+                              <span className="font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-1 rounded border border-indigo-100">
+                                {r.internalMarks} / 40
+                              </span>
+                              <span className="text-[10px] text-slate-400 block mt-0.5">Faculty Assessed</span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <div className="flex items-center gap-1.5">
+                                <input
+                                  type="number"
+                                  min="0"
+                                  max="60"
+                                  step="0.5"
+                                  value={externalMarksInputMap[r.studentId] ?? ''}
+                                  onChange={(e) => {
+                                    const val = e.target.value;
+                                    setExternalMarksInputMap((prev) => ({
+                                      ...prev,
+                                      [r.studentId]: val === '' ? '' : Math.max(0, Math.min(60, Number(val))),
+                                    }));
+                                  }}
+                                  className="w-24 border border-slate-300 rounded-lg p-2 font-mono font-bold text-blue-700 bg-white focus:ring-2 focus:ring-blue-500 text-xs shadow-inner"
+                                  placeholder="0-60"
+                                />
+                                <span className="text-slate-400 font-bold">/ 60</span>
+                              </div>
+                            </td>
+                            <td className="py-3 px-4 font-mono font-bold text-slate-900 text-sm">
+                              {liveTotal} / 100
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2.5 py-1 rounded text-[11px] font-bold ${
+                                  previewGrade === 'F'
+                                    ? 'bg-rose-100 text-rose-800'
+                                    : previewGrade === 'O' || previewGrade === 'A+'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : 'bg-blue-100 text-blue-800'
+                                }`}
+                              >
+                                {previewGrade} ({previewGP} GP)
+                              </span>
+                            </td>
+                            <td className="py-3 px-4">
+                              <span
+                                className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                  r.isDraft || r.publicationState === 'DRAFT'
+                                    ? 'bg-amber-100 text-amber-800'
+                                    : 'bg-emerald-100 text-emerald-800'
+                                }`}
+                              >
+                                {r.isDraft || r.publicationState === 'DRAFT' ? 'ENTRY PENDING' : 'RECORDED'}
+                              </span>
+                            </td>
+                            <td className="py-3 px-4 text-right">
+                              <button
+                                onClick={() => handleSaveSingleExternalMark(r.studentId)}
+                                disabled={savingExternalMarks}
+                                className="px-3 py-1.5 bg-blue-50 hover:bg-blue-600 hover:text-white text-blue-700 border border-blue-200 rounded font-bold text-xs transition flex items-center gap-1 ml-auto"
+                              >
+                                <Save className="h-3.5 w-3.5" />
+                                Save
+                              </button>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
+              {/* Bottom bulk save bar */}
+              {results.length > 0 && (
+                <div className="flex justify-between items-center pt-2">
+                  <span className="text-xs text-slate-500 font-medium">
+                    All saves update official student mark records, increment result versions, and append immutable audit logs.
+                  </span>
+                  <button
+                    onClick={handleSaveAllExternalMarks}
+                    disabled={savingExternalMarks}
+                    className="px-5 py-2.5 bg-blue-600 hover:bg-blue-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50 transition"
+                  >
+                    <Save className="h-4 w-4" />
+                    {savingExternalMarks ? 'Saving All...' : 'Save All External Marks'}
+                  </button>
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1162,42 +1416,283 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB: UNPUBLISH / REOPEN */}
-        {activeTab === 'unpublish' && (
+        {/* TAB: CORRECTION REQUESTS REVIEW & STATUTORY AUTHORIZATION */}
+        {activeTab === 'corrections' && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <div className="flex flex-col md:flex-row md:items-center justify-between gap-4 pb-4 border-b border-slate-100">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-amber-600" />
+                    Branch Grievance &amp; Correction Queue ({designatedDeptCode})
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Multi-tier grievance workflow: Student Submits &rarr; Faculty Proposes &rarr; Exam Admin Authorizes &amp; Gazettes
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs font-semibold px-2.5 py-1 bg-amber-50 text-amber-800 border border-amber-200 rounded-lg">
+                    {correctionRequests.filter((r) => r.status === 'PROPOSED_BY_FACULTY').length} Awaiting Authorization
+                  </span>
+                </div>
+              </div>
+
+              {correctionRequests.length === 0 ? (
+                <div className="p-8 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
+                  No active correction requests in grievance ledger for {designatedDeptCode} branch.
+                </div>
+              ) : (
+                <div className="overflow-x-auto">
+                  <table className="w-full text-left text-xs border-collapse">
+                    <thead>
+                      <tr className="bg-slate-50 border-y border-slate-200 text-slate-600 font-bold">
+                        <th className="py-2.5 px-4">Student</th>
+                        <th className="py-2.5 px-4">Roll No</th>
+                        <th className="py-2.5 px-4">Course</th>
+                        <th className="py-2.5 px-4">Category</th>
+                        <th className="py-2.5 px-4">Student Reason</th>
+                        <th className="py-2.5 px-4">Faculty Proposal</th>
+                        <th className="py-2.5 px-4">Status</th>
+                        <th className="py-2.5 px-4">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody className="divide-y divide-slate-100">
+                      {correctionRequests.map((req) => (
+                        <tr key={req.id} className="hover:bg-slate-50">
+                          <td className="py-3 px-4 font-bold text-slate-900">{req.student?.user?.name}</td>
+                          <td className="py-3 px-4 font-mono font-bold text-purple-700">{req.student?.rollNumber}</td>
+                          <td className="py-3 px-4">
+                            <span className="font-bold text-slate-800">{req.offering?.course?.code}</span>
+                            <div className="text-[10px] text-slate-400">{req.offering?.course?.title}</div>
+                          </td>
+                          <td className="py-3 px-4">
+                            <span className="px-2 py-0.5 rounded text-[10px] font-bold bg-slate-100 text-slate-700">
+                              {req.category}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4 text-slate-600 max-w-xs">{req.reason}</td>
+                          <td className="py-3 px-4">
+                            {req.proposedInternal !== null || req.proposedExternal !== null ? (
+                              <div className="font-mono text-xs">
+                                <span className="font-bold text-indigo-700">Int: {req.proposedInternal ?? '—'}</span> /{' '}
+                                <span className="font-bold text-blue-700">Ext: {req.proposedExternal ?? '—'}</span>
+                                {req.facultyNote && (
+                                  <div className="text-[10px] text-slate-500 font-sans italic mt-0.5 max-w-xs truncate">
+                                    "{req.facultyNote}"
+                                  </div>
+                                )}
+                              </div>
+                            ) : (
+                              <span className="text-slate-400 italic text-[11px]">Pending review</span>
+                            )}
+                          </td>
+                          <td className="py-3 px-4">
+                            <span
+                              className={`px-2 py-0.5 rounded text-[10px] font-bold ${
+                                req.status === 'APPROVED_BY_EXAM_ADMIN'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : req.status === 'PROPOSED_BY_FACULTY'
+                                  ? 'bg-amber-100 text-amber-800'
+                                  : req.status === 'REJECTED'
+                                  ? 'bg-rose-100 text-rose-800'
+                                  : 'bg-blue-100 text-blue-800'
+                              }`}
+                            >
+                              {req.status === 'APPROVED_BY_EXAM_ADMIN'
+                                ? 'GAZETTED & UPDATED'
+                                : req.status === 'PROPOSED_BY_FACULTY'
+                                ? 'FACULTY PROPOSED'
+                                : req.status === 'SUBMITTED'
+                                ? 'STUDENT SUBMITTED'
+                                : req.status}
+                            </span>
+                          </td>
+                          <td className="py-3 px-4">
+                            {req.status === 'PROPOSED_BY_FACULTY' ? (
+                              <button
+                                onClick={() => {
+                                  setSelectedCorrectionForApprove(req);
+                                  setAdminApproveReason(`Authorized and gazetted by designated Exam Admin for ${designatedDeptCode} branch`);
+                                }}
+                                className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs shadow-sm flex items-center gap-1.5 whitespace-nowrap"
+                              >
+                                <CheckCircle className="h-3.5 w-3.5" />
+                                Authorize &amp; Gazette
+                              </button>
+                            ) : req.status === 'APPROVED_BY_EXAM_ADMIN' ? (
+                              <span className="text-[11px] font-bold text-emerald-600 flex items-center gap-1">
+                                <CheckCircle className="h-3.5 w-3.5" /> Published
+                              </span>
+                            ) : (
+                              <span className="text-slate-400 text-xs italic">Awaiting faculty review</span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+          </div>
+        )}
+
+        {/* TAB: ANNOUNCEMENTS */}
+        {activeTab === 'announcements' && (
+          <div className="space-y-6">
+            {/* Announcement Creation Form */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <RotateCcw className="h-5 w-5 text-rose-600" />
-                Emergency Result Unpublish / Senate Reopen Controls
+                <Bell className="h-5 w-5 text-rose-600" />
+                Publish Statutory Examination Notice
               </h2>
               <p className="text-xs text-slate-500">
-                Statutory authorization to recall published results in the event of systemic evaluation discrepancies. Requires Dean approval.
+                Official notices published by the Examination Cell are broadcast across all student, faculty, and administrative portals.
               </p>
-              <div className="p-5 bg-rose-50 border border-rose-200 rounded-xl space-y-3 text-xs text-rose-900">
-                <div className="font-bold text-sm">Emergency Recalling Protocol:</div>
-                <p>
-                  Unpublishing hides the result from student dashboards and reopens the marks entry sheet for faculty or examination corrections.
-                </p>
+
+              <form onSubmit={handleCreateAnnouncement} className="space-y-4 pt-2">
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="md:col-span-2">
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Notice Headline *</label>
+                    <input
+                      type="text"
+                      required
+                      placeholder="e.g., End-Semester Examination Schedule & Revaluation Gazette"
+                      value={newAnnouncement.title}
+                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                      className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-rose-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs font-bold text-slate-700 mb-1">Category *</label>
+                    <select
+                      value={newAnnouncement.category}
+                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, category: e.target.value as any })}
+                      className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-rose-500 bg-white"
+                    >
+                      <option value="EXAMINATION">EXAMINATION</option>
+                      <option value="ACADEMIC">ACADEMIC</option>
+                      <option value="URGENT">URGENT</option>
+                      <option value="CAMPUS">CAMPUS</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Notice Body / Directives *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    placeholder="Provide full statutory details, guidelines, or timeline..."
+                    value={newAnnouncement.content}
+                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                    className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-rose-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-xs font-bold text-slate-700 mb-1">Upload Notification Image / Schedule Circular</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onloadend = () => {
+                          setNewAnnouncement({ ...newAnnouncement, imageData: reader.result as string });
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full text-xs text-slate-500 file:mr-4 file:py-2 file:px-4 file:rounded-lg file:border-0 file:text-xs file:font-semibold file:bg-rose-50 file:text-rose-700 hover:file:bg-rose-100"
+                  />
+                  {newAnnouncement.imageData && (
+                    <div className="mt-2 flex items-center gap-3">
+                      <div className="w-16 h-16 rounded-lg overflow-hidden border border-slate-200">
+                        <img src={newAnnouncement.imageData} alt="Preview" className="w-full h-full object-cover" />
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setNewAnnouncement({ ...newAnnouncement, imageData: '' })}
+                        className="text-xs text-rose-600 hover:underline font-semibold"
+                      >
+                        Remove Image
+                      </button>
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end pt-2">
+                  <button
+                    type="submit"
+                    disabled={submittingAnnouncement}
+                    className="px-6 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs shadow-sm disabled:opacity-50 flex items-center gap-2"
+                  >
+                    <Send className="h-4 w-4" />
+                    {submittingAnnouncement ? 'Publishing...' : 'Gazette Notice Broadcast'}
+                  </button>
+                </div>
+              </form>
+            </div>
+
+            {/* Announcements Feed */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-900">Active Campus Notices ({announcements.length})</h3>
+              <div className="space-y-4">
+                {announcements.map((ann) => (
+                  <div key={ann.id} className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span
+                        className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                          ann.category === 'URGENT'
+                            ? 'bg-rose-100 text-rose-800'
+                            : ann.category === 'EXAMINATION'
+                            ? 'bg-amber-100 text-amber-800'
+                            : ann.category === 'CAMPUS'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-indigo-100 text-indigo-800'
+                        }`}
+                      >
+                        {ann.category}
+                      </span>
+                      <span className="text-slate-400 font-mono text-[11px]">{new Date(ann.createdAt).toLocaleString()}</span>
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900">{ann.title}</h4>
+                    {ann.imageUrl && (
+                      <div className="rounded-lg overflow-hidden max-h-72 w-full bg-slate-100 border border-slate-200">
+                        <img
+                          src={ann.imageUrl}
+                          alt={ann.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{ann.content}</p>
+                    <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-200">
+                      Published by: {ann.createdBy?.name || 'Administrator'} • {ann.createdBy?.role || 'EXAM_ADMIN'}
+                    </div>
+                  </div>
+                ))}
               </div>
             </div>
           </div>
         )}
 
-        {/* TAB: CORRECTION REQUESTS REVIEW */}
-        {activeTab === 'corrections' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-amber-600" />
-                Branch Grievance &amp; Correction Queue ({designatedDeptCode})
-              </h2>
-              <p className="text-xs text-slate-500">
-                Review grievances submitted by students and faculty. Designated branch exam admin approves or rejects updates.
-              </p>
-              <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                No pending student correction requests in queue for {designatedDeptCode} branch.
-              </div>
-            </div>
+        {/* TAB: TRENDING EVENTS (CAMPUS HUB) */}
+        {activeTab === 'trending-events' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="EVENTS" embedded={true} />
+          </div>
+        )}
+
+        {/* TAB: LOST & FOUND (CAMPUS HUB) */}
+        {activeTab === 'lost-found' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="LOST_FOUND" embedded={true} />
           </div>
         )}
 
@@ -1231,6 +1726,85 @@ export const ExamAdminDashboard: React.FC<ExamAdminDashboardProps> = ({
           </div>
         )}
       </div>
+
+      {/* MODAL: EXAM ADMIN STATUTORY AUTHORIZATION MODAL */}
+      {selectedCorrectionForApprove && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-center pb-3 border-b border-slate-100">
+              <h3 className="font-bold text-base text-slate-900 flex items-center gap-2">
+                <ShieldCheck className="h-5 w-5 text-emerald-600" />
+                Statutory Authorization &amp; Gazetting
+              </h3>
+              <button
+                onClick={() => setSelectedCorrectionForApprove(null)}
+                className="text-slate-400 hover:text-slate-600 font-bold"
+              >
+                ✕
+              </button>
+            </div>
+
+            <div className="bg-slate-50 p-3 rounded-lg border border-slate-200 text-xs space-y-1.5">
+              <div className="font-bold text-slate-800">
+                Candidate: {selectedCorrectionForApprove.student?.user?.name} ({selectedCorrectionForApprove.student?.rollNumber})
+              </div>
+              <div className="text-slate-600">
+                Course: {selectedCorrectionForApprove.offering?.course?.code} — {selectedCorrectionForApprove.offering?.course?.title}
+              </div>
+              <div className="text-slate-600">
+                Student Reason: <span className="italic font-normal">"{selectedCorrectionForApprove.reason}"</span>
+              </div>
+              <div className="text-slate-600">
+                Faculty Note: <span className="italic font-normal">"{selectedCorrectionForApprove.facultyNote || 'Verified'}"</span>
+              </div>
+            </div>
+
+            <div className="p-4 bg-emerald-50 border border-emerald-200 rounded-xl space-y-2 text-xs">
+              <div className="font-bold text-emerald-900 text-sm">Faculty Proposed Revised Marks:</div>
+              <div className="grid grid-cols-2 gap-4 font-mono font-bold text-slate-800 pt-1">
+                <div>Internal Marks: {selectedCorrectionForApprove.proposedInternal ?? '—'} / 40</div>
+                <div>External Marks: {selectedCorrectionForApprove.proposedExternal ?? '—'} / 60</div>
+              </div>
+              <div className="text-emerald-700 text-[11px] pt-1">
+                Authorizing will increment the version number, update final total &amp; letter grade, log immutable audit record, and update Student &amp; Faculty dashboards immediately.
+              </div>
+            </div>
+
+            <form onSubmit={handleApproveCorrection} className="space-y-4 pt-1">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 mb-1">
+                  Examination Authority Gazette Order / Justification *
+                </label>
+                <textarea
+                  required
+                  rows={2}
+                  value={adminApproveReason}
+                  onChange={(e) => setAdminApproveReason(e.target.value)}
+                  className="w-full text-xs border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-emerald-500"
+                />
+              </div>
+
+              <div className="flex justify-end gap-3 pt-2">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCorrectionForApprove(null)}
+                  className="px-4 py-2 border border-slate-300 rounded-lg text-xs font-bold text-slate-700 hover:bg-slate-50"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingApproval}
+                  className="px-5 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+                >
+                  <CheckCircle className="h-4 w-4" />
+                  {submittingApproval ? 'Gazetting...' : 'Authorize & Gazette Grade'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </PortalLayout>
   );
 };

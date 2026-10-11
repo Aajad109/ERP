@@ -62,6 +62,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [timetableData, setTimetableData] = useState<any[]>([]);
   const [announcements, setAnnouncements] = useState<any[]>([]);
   const [revaluationRequests, setRevaluationRequests] = useState<any[]>([]);
+  const [correctionRequests, setCorrectionRequests] = useState<any[]>([]);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Correction Request Modal
@@ -77,9 +78,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
   const [submittingReval, setSubmittingReval] = useState<boolean>(false);
   const [revalMsg, setRevalMsg] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
-  // Scenario B Interactive Security Suite
-  const [attackLogs, setAttackLogs] = useState<any[]>([]);
-  const [attackRunning, setAttackRunning] = useState<boolean>(false);
+  // Universal Grievance Submission Modal (Internal Faculty vs External Exam Admin)
+  const [showNewGrievanceModal, setShowNewGrievanceModal] = useState<boolean>(false);
+  const [grievanceCourseResultId, setGrievanceCourseResultId] = useState<string>('');
+  const [grievanceChannel, setGrievanceChannel] = useState<'INTERNAL_FACULTY' | 'EXTERNAL_EXAM_ADMIN'>('INTERNAL_FACULTY');
+  const [universalReason, setUniversalReason] = useState<string>('');
+  const [universalRequestedMarks, setUniversalRequestedMarks] = useState<string>('');
+  const [submittingUniversalGrievance, setSubmittingUniversalGrievance] = useState<boolean>(false);
+  const [universalFeedback, setUniversalFeedback] = useState<{ type: 'success' | 'error'; text: string } | null>(null);
 
   const studentProfileId = currentUser?.studentProfile?.id;
 
@@ -91,13 +97,14 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     if (!studentProfileId) return;
     try {
       setLoading(true);
-      const [resRes, attRes, marksRes, timeRes, annRes, revalRes] = await Promise.all([
+      const [resRes, attRes, marksRes, timeRes, annRes, revalRes, corrRes] = await Promise.all([
         api.getStudentResults(studentProfileId).catch(() => ({ results: [], student: null })),
         api.getStudentAttendance(studentProfileId).catch(() => ({ overallPercentage: 85, subjectBreakdown: [] })),
         api.getStudentMarks(studentProfileId).catch(() => ({ courses: [] })),
         api.getTimetable().catch(() => ({ slots: [] })),
         api.getAnnouncements().catch(() => ({ announcements: [] })),
         api.getRevaluationRequests().catch(() => ({ requests: [] })),
+        api.getCorrectionRequests().catch(() => ({ requests: [] })),
       ]);
 
       setResultsData(resRes);
@@ -106,6 +113,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
       setTimetableData(timeRes.slots || []);
       setAnnouncements(annRes.announcements || []);
       setRevaluationRequests(revalRes.requests || []);
+      setCorrectionRequests(corrRes.requests || []);
     } catch (err) {
       console.error('Failed to load student data:', err);
     } finally {
@@ -158,34 +166,40 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     }
   };
 
-  // Scenario B Security Tests
-  const runAttackTest = async (testName: string, attackFn: () => Promise<any>) => {
-    setAttackRunning(true);
-    const logEntry: any = {
-      testName,
-      timestamp: new Date().toLocaleTimeString(),
-      status: 'pending',
-    };
+  const handleUniversalGrievanceSubmit = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!grievanceCourseResultId) return;
 
     try {
-      const res = await attackFn();
-      logEntry.status = 'VULNERABILITY_DETECTED';
-      logEntry.httpStatus = 200;
-      logEntry.details = 'Attack unexpectedly succeeded! Backend authorization failed.';
-      logEntry.response = res;
-    } catch (err: any) {
-      logEntry.httpStatus = err.status || 403;
-      if (err.status === 403 || err.status === 401) {
-        logEntry.status = 'BLOCKED_BY_RBAC';
-        logEntry.details = `Server rejected attack with HTTP ${err.status}: ${err.data?.message || err.message}`;
-      } else {
-        logEntry.status = `HTTP_${err.status}`;
-        logEntry.details = err.data?.message || err.message;
-      }
-    }
+      setSubmittingUniversalGrievance(true);
+      setUniversalFeedback(null);
 
-    setAttackLogs((prev) => [logEntry, ...prev]);
-    setAttackRunning(false);
+      if (grievanceChannel === 'INTERNAL_FACULTY') {
+        await api.requestCorrection(
+          grievanceCourseResultId,
+          universalReason,
+          universalRequestedMarks ? Number(universalRequestedMarks) : undefined
+        );
+        setUniversalFeedback({
+          type: 'success',
+          text: 'Internal marks grievance submitted directly to course faculty! Your instructor has direct authority to resolve and update internal marks without Exam Admin intervention.',
+        });
+      } else {
+        await api.applyRevaluation(grievanceCourseResultId, universalReason);
+        setUniversalFeedback({
+          type: 'success',
+          text: 'External examination grievance submitted to Examination Admin! Registered for statutory revaluation review.',
+        });
+      }
+
+      setUniversalReason('');
+      setUniversalRequestedMarks('');
+      loadAllStudentData();
+    } catch (err: any) {
+      setUniversalFeedback({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSubmittingUniversalGrievance(false);
+    }
   };
 
   const student = resultsData?.student || currentUser?.studentProfile;
@@ -211,13 +225,10 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
     { id: 'internal-marks', label: 'Internal Marks', icon: FileText },
     { id: 'results', label: 'Examination Results', icon: Award },
     { id: 'performance', label: 'Academic Performance', icon: TrendingUp },
-    { id: 'corrections', label: 'Correction Requests', icon: AlertTriangle },
     { id: 'revaluation', label: 'Revaluation', icon: RotateCcw, badge: revaluationRequests.length || undefined },
     { id: 'announcements', label: 'Announcements', icon: Bell, badge: announcements.length || undefined },
     { id: 'trending-events', label: 'Trending Events', icon: Flame },
     { id: 'lost-found', label: 'Lost & Found', icon: Search },
-    { id: 'security-suite', label: 'Security Test (Scenario B)', icon: ShieldAlert },
-    { id: 'settings', label: 'Settings', icon: Settings },
   ];
 
   const handleNavSelect = (id: string) => {
@@ -338,11 +349,11 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 <div className="bg-white rounded-xl p-5 shadow-sm border border-slate-200">
                   <div className="flex justify-between items-start">
                     <div>
-                      <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Correction Cases</div>
+                      <div className="text-xs font-bold text-slate-500 uppercase tracking-wider">Revaluations</div>
                       <div className="text-2xl font-black text-slate-900 mt-1">
-                        {results.filter((r: any) => r.currentVersion > 1).length}
+                        {revaluationRequests.length}
                       </div>
-                      <div className="text-xs text-indigo-600 font-semibold mt-1">Versioned &amp; Audited</div>
+                      <div className="text-xs text-indigo-600 font-semibold mt-1">Applications Tracked</div>
                     </div>
                     <div className="p-2.5 bg-purple-50 text-purple-600 rounded-lg">
                       <RotateCcw className="h-5 w-5" />
@@ -507,15 +518,17 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                                   )}
                                   <button
                                     onClick={() => setSelectedResult(r)}
-                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold border border-indigo-200 hover:bg-indigo-50 px-2 py-1 rounded transition"
+                                    className="text-xs text-indigo-600 hover:text-indigo-800 font-semibold border border-indigo-200 hover:bg-indigo-50 px-2.5 py-1 rounded transition"
+                                    title="Submit internal assessment grievance directly to course faculty"
                                   >
-                                    Request Correction
+                                    Internal Grievance
                                   </button>
                                   <button
                                     onClick={() => setSelectedResultForReval(r)}
-                                    className="text-xs text-amber-700 hover:text-amber-900 font-semibold border border-amber-200 hover:bg-amber-50 px-2 py-1 rounded transition"
+                                    className="text-xs text-amber-700 hover:text-amber-900 font-semibold border border-amber-200 hover:bg-amber-50 px-2.5 py-1 rounded transition"
+                                    title="Apply for statutory external exam revaluation"
                                   >
-                                    Apply Reval
+                                    Revaluation (Ext)
                                   </button>
                                 </div>
                               </td>
@@ -680,9 +693,28 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                       <h3 className="text-sm font-bold text-slate-900">
                         {course.courseCode} — {course.courseTitle}
                       </h3>
-                      <span className="text-xs font-black bg-indigo-100 text-indigo-900 px-3 py-1 rounded-full">
-                        Internal Total: {course.internalTotal} / 40
-                      </span>
+                      <div className="flex flex-wrap items-center gap-2">
+                        <span className="text-xs font-black bg-indigo-100 text-indigo-900 px-3 py-1 rounded-full">
+                          Internal Total: {course.internalTotal} / 40
+                        </span>
+                        <button
+                          onClick={() => {
+                            const matching = results.find(
+                              (r: any) => r.offeringId === course.offeringId || r.offering?.course?.code === course.courseCode
+                            );
+                            if (matching) {
+                              setSelectedResult(matching);
+                            } else if (results.length > 0) {
+                              setSelectedResult(results[0]);
+                            }
+                          }}
+                          className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-600 hover:text-white text-indigo-700 rounded-lg text-xs font-bold border border-indigo-200 transition flex items-center gap-1"
+                          title="Submit internal assessment grievance directly to course faculty"
+                        >
+                          <AlertTriangle className="h-3.5 w-3.5" />
+                          Grievance to Faculty
+                        </button>
+                      </div>
                     </div>
 
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
@@ -709,16 +741,32 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           {/* TAB: REVALUATION MANAGEMENT */}
           {activeTab === 'revaluation' && (
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-6">
-              <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100">
                 <div>
                   <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                     <RotateCcw className="h-5 w-5 text-amber-600" />
                     External Examination Revaluation Portal
                   </h2>
-                  <p className="text-xs text-slate-500">
-                    Apply for statutory script re-evaluation for gazetted external marks.
+                  <p className="text-xs text-slate-500 mt-0.5">
+                    Apply for statutory script re-evaluation for gazetted external marks (submitted to Examination Admin).
                   </p>
                 </div>
+                <button
+                  onClick={() => {
+                    if (results.length > 0) {
+                      setGrievanceCourseResultId(results[0].id);
+                    }
+                    setGrievanceChannel('EXTERNAL_EXAM_ADMIN');
+                    setUniversalReason('');
+                    setUniversalRequestedMarks('');
+                    setUniversalFeedback(null);
+                    setShowNewGrievanceModal(true);
+                  }}
+                  className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 transition whitespace-nowrap"
+                >
+                  <RotateCcw className="h-4 w-4" />
+                  Apply for External Revaluation
+                </button>
               </div>
 
               <div className="space-y-4">
@@ -785,137 +833,43 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 Institutional Notice Board
               </h2>
               <div className="space-y-4">
-                {announcements.map((ann: any) => (
-                  <div key={ann.id} className="p-4 rounded-xl border border-slate-200 bg-slate-50/50 space-y-2">
-                    <div className="flex justify-between items-center text-xs">
-                      <span className="bg-indigo-100 text-indigo-800 font-bold px-2 py-0.5 rounded text-[10px]">
-                        {ann.category}
-                      </span>
-                      <span className="text-slate-400 font-mono">{new Date(ann.createdAt).toLocaleString()}</span>
-                    </div>
-                    <h3 className="text-sm font-bold text-slate-900">{ann.title}</h3>
-                    <p className="text-xs text-slate-700 leading-relaxed">{ann.content}</p>
-                    <div className="text-[10px] text-slate-400">
-                      Issued by: {ann.createdBy?.name || 'Academic Administration'}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* TAB: SCENARIO B LIVE SECURITY ATTACK SUITE */}
-          {activeTab === 'security-suite' && (
-            <div className="bg-white rounded-xl shadow-sm border border-rose-200 p-6 space-y-6">
-              <div className="flex items-start justify-between border-b border-rose-100 pb-4">
-                <div>
-                  <div className="flex items-center space-x-2">
-                    <ShieldAlert className="h-6 w-6 text-rose-600" />
-                    <h2 className="text-lg font-bold text-slate-900">
-                      Scenario B: Unauthorized Student API Attack Suite
-                    </h2>
-                  </div>
-                  <p className="text-xs text-slate-600 mt-1 max-w-3xl">
-                    Demonstrates strict server-side zero-client-trust RBAC. An authenticated student attempts faculty marks tampering, administrative faculty reassignment, IDOR cross-student result harvesting, and privileged exam admin overrides.
-                  </p>
-                </div>
-                <span className="bg-rose-100 text-rose-800 font-bold text-xs px-3 py-1 rounded-full border border-rose-300">
-                  Hackathon Mandatory Scenario B
-                </span>
-              </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-3">
-                <button
-                  disabled={attackRunning}
-                  onClick={() =>
-                    runAttackTest('Attack 1: Unauthorized Marks Tampering (PUT /api/marks/:id)', async () =>
-                      api.updateMark('00000000-0000-0000-0000-000000000001', 1, 40)
-                    )
-                  }
-                  className="p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-left transition flex flex-col justify-between"
-                >
-                  <span className="text-xs font-bold text-rose-900">Attack 1: Edit Marks</span>
-                  <span className="text-[10px] text-rose-700 mt-1">Calls PUT /api/marks/:id</span>
-                  <span className="text-[10px] font-bold text-rose-600 mt-2">Expects: 403 Forbidden</span>
-                </button>
-
-                <button
-                  disabled={attackRunning}
-                  onClick={() =>
-                    runAttackTest('Attack 2: Unauthorized Faculty Reassignment', async () =>
-                      api.reassignFaculty(
-                        '00000000-0000-0000-0000-000000000001',
-                        currentUser.id,
-                        new Date().toISOString(),
-                        'Student self-promotion'
-                      )
-                    )
-                  }
-                  className="p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-left transition flex flex-col justify-between"
-                >
-                  <span className="text-xs font-bold text-rose-900">Attack 2: Reassign Faculty</span>
-                  <span className="text-[10px] text-rose-700 mt-1">Calls POST /api/academic/assignments</span>
-                  <span className="text-[10px] font-bold text-rose-600 mt-2">Expects: 403 Forbidden</span>
-                </button>
-
-                <button
-                  disabled={attackRunning}
-                  onClick={() =>
-                    runAttackTest('Attack 3: IDOR Read Other Student Result', async () => {
-                      const priyaId = '00000000-0000-0000-0000-000000000002';
-                      return api.getStudentResults(priyaId);
-                    })
-                  }
-                  className="p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-left transition flex flex-col justify-between"
-                >
-                  <span className="text-xs font-bold text-rose-900">Attack 3: IDOR Result Spy</span>
-                  <span className="text-[10px] text-rose-700 mt-1">GET /api/results/student/:otherId</span>
-                  <span className="text-[10px] font-bold text-rose-600 mt-2">Expects: 403 Forbidden</span>
-                </button>
-
-                <button
-                  disabled={attackRunning}
-                  onClick={() =>
-                    runAttackTest('Attack 4: Privileged Exam Admin Override', async () =>
-                      api.directCorrection(results[0]?.id || '00000000-0000-0000-0000-000000000001', {
-                        expectedVersion: 1,
-                        category: 'TOTALING_ERROR',
-                        reason: 'Student tampering',
-                        evidenceReference: 'FAKE-001',
-                        internalMarks: 40,
-                        externalMarks: 60,
-                      })
-                    )
-                  }
-                  className="p-3 bg-rose-50 hover:bg-rose-100 border border-rose-200 rounded-lg text-left transition flex flex-col justify-between"
-                >
-                  <span className="text-xs font-bold text-rose-900">Attack 4: Exam Admin Route</span>
-                  <span className="text-[10px] text-rose-700 mt-1">POST /api/results/:id/direct-correction</span>
-                  <span className="text-[10px] font-bold text-rose-600 mt-2">Expects: 403 Forbidden</span>
-                </button>
-              </div>
-
-              {/* Execution Output Ledger */}
-              <div className="bg-slate-900 text-slate-100 p-4 rounded-xl font-mono text-xs space-y-2 max-h-72 overflow-y-auto">
-                <div className="text-emerald-400 font-bold border-b border-slate-800 pb-1">
-                  &gt; Live Server-Side Attack Defense Console
-                </div>
-                {attackLogs.length === 0 ? (
-                  <div className="text-slate-500 italic py-2">
-                    Click any attack button above to execute live API exploitation attempts against backend.
+                {announcements.length === 0 ? (
+                  <div className="p-8 text-center text-xs text-slate-500 bg-slate-50 rounded-xl border border-slate-200">
+                    No active announcements published.
                   </div>
                 ) : (
-                  attackLogs.map((log, index) => (
-                    <div key={index} className="space-y-0.5 border-b border-slate-800/60 pb-2">
-                      <div className="flex justify-between text-slate-400 text-[10px]">
-                        <span>{log.testName}</span>
-                        <span>{log.timestamp}</span>
-                      </div>
-                      <div className="flex items-center space-x-2">
-                        <span className="bg-emerald-500/20 text-emerald-400 px-1.5 py-0.5 rounded text-[10px] font-bold">
-                          HTTP {log.httpStatus}
+                  announcements.map((ann: any) => (
+                    <div key={ann.id} className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3 hover:shadow-sm transition">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                          ann.category === 'URGENT'
+                            ? 'bg-rose-100 text-rose-800'
+                            : ann.category === 'EXAMINATION'
+                            ? 'bg-amber-100 text-amber-800'
+                            : ann.category === 'CAMPUS'
+                            ? 'bg-emerald-100 text-emerald-800'
+                            : 'bg-indigo-100 text-indigo-800'
+                        }`}>
+                          {ann.category}
                         </span>
-                        <span className="text-slate-300">{log.details}</span>
+                        <span className="text-slate-400 font-mono text-[11px]">{new Date(ann.createdAt).toLocaleString()}</span>
+                      </div>
+                      <h3 className="text-sm font-bold text-slate-900">{ann.title}</h3>
+                      {ann.imageUrl && (
+                        <div className="rounded-lg overflow-hidden max-h-72 w-full bg-slate-100 border border-slate-200">
+                          <img
+                            src={ann.imageUrl}
+                            alt={ann.title}
+                            className="w-full h-full object-cover"
+                            onError={(e) => {
+                              (e.target as HTMLElement).style.display = 'none';
+                            }}
+                          />
+                        </div>
+                      )}
+                      <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{ann.content}</p>
+                      <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-200/60">
+                        Issued by: {ann.createdBy?.name || 'Academic Administration'} • {ann.createdBy?.role || 'ACADEMIC_ADMIN'}
                       </div>
                     </div>
                   ))
@@ -1082,14 +1036,16 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                             <button
                               onClick={() => setSelectedResult(r)}
                               className="px-2.5 py-1 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 rounded text-[11px] font-bold border border-indigo-200"
+                              title="Ask faculty directly to review internal assessment"
                             >
-                              Grievance
+                              Internal Grievance
                             </button>
                             <button
                               onClick={() => setSelectedResultForReval(r)}
                               className="px-2.5 py-1 bg-amber-50 hover:bg-amber-100 text-amber-700 rounded text-[11px] font-bold border border-amber-200"
+                              title="Statutory revaluation for external examination"
                             >
-                              Revaluation
+                              Revaluation (Ext)
                             </button>
                           </td>
                         </tr>
@@ -1129,27 +1085,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
             </div>
           )}
 
-          {/* TAB: CORRECTION REQUESTS */}
-          {activeTab === 'corrections' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <AlertTriangle className="h-5 w-5 text-indigo-600" />
-                  My Grievance &amp; Correction Requests
-                </h2>
-                <p className="text-xs text-slate-500">
-                  Track student-initiated mark grievance reviews. Requests are routed first to course faculty, then forwarded to Examination Admin for gazetting.
-                </p>
-
-                <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 text-xs">
-                  <div className="font-bold text-slate-800 mb-2">How to submit a correction request:</div>
-                  <p className="text-slate-600 leading-relaxed">
-                    Navigate to <span className="font-semibold text-indigo-600">Examination Results</span> or <span className="font-semibold text-indigo-600">Internal Marks</span>, locate the subject requiring review, and click <span className="font-semibold bg-indigo-100 text-indigo-800 px-1 rounded">Grievance</span> to open the submission modal.
-                  </p>
-                </div>
-              </div>
-            </div>
-          )}
 
           {/* TAB: TRENDING EVENTS (CAMPUS HUB) */}
           {activeTab === 'trending-events' && (
@@ -1164,44 +1099,6 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
               <CampusHub currentUser={currentUser} initialTab="LOST_FOUND" embedded={true} />
             </div>
           )}
-
-          {/* TAB: SETTINGS */}
-          {activeTab === 'settings' && (
-            <div className="space-y-6">
-              <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-                <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                  <Settings className="h-5 w-5 text-indigo-600" />
-                  Student Portal Settings &amp; Preferences
-                </h2>
-                <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                    <div className="font-bold text-slate-800">Account Notification Preferences</div>
-                    <label className="flex items-center gap-2 text-slate-600">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-indigo-600" />
-                      Email notifications for published examination results
-                    </label>
-                    <label className="flex items-center gap-2 text-slate-600">
-                      <input type="checkbox" defaultChecked className="rounded border-slate-300 text-indigo-600" />
-                      Attendance shortage advisory alerts
-                    </label>
-                  </div>
-                  <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                    <div className="font-bold text-slate-800">Credential Security</div>
-                    <p className="text-slate-500">
-                      Passwords must satisfy institutional standards (minimum 8 characters with alphanumeric and special symbols).
-                    </p>
-                    <button
-                      type="button"
-                      onClick={() => alert('Password update form is managed by Academic Admin')}
-                      className="px-3 py-1.5 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded font-semibold text-xs"
-                    >
-                      Request Credential Reset
-                    </button>
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
         </div>
       )}
 
@@ -1211,27 +1108,37 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
             <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Submit Grievance Correction Request</h3>
+                <h3 className="text-base font-bold text-slate-900">Internal Marks Grievance (Direct to Faculty)</h3>
                 <p className="text-xs text-slate-500">Course: {selectedResult.offering?.course?.code} — {selectedResult.offering?.course?.title}</p>
               </div>
               <button onClick={() => setSelectedResult(null)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
+            <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-xs text-indigo-900 space-y-1">
+              <div className="font-bold">Direct Faculty Review:</div>
+              <p className="text-[11px] leading-relaxed">
+                You can directly ask your course faculty to review internal assessment marks (Mid-1, Mid-2, Quizzes, Lab/Assignments out of 40). Your faculty has full authority to change internal marks without Exam Admin permission, and the updated marks reflect immediately on both student results and the Examination Admin portal.
+              </p>
+              <div className="pt-1 text-[11px] text-amber-800 font-semibold border-t border-indigo-200/60">
+                Notice: For end-semester external exam marks (/60), students can ONLY appeal via statutory Revaluation.
+              </div>
+            </div>
+
             <form onSubmit={handleRequestCorrection} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Reason for Correction Request *</label>
+                <label className="block font-bold text-slate-700 mb-1">Reason for Internal Grievance *</label>
                 <textarea
                   required
                   rows={3}
                   value={correctionReason}
                   onChange={(e) => setCorrectionReason(e.target.value)}
-                  placeholder="Specify question number, missing step marks, or totaling discrepancy..."
+                  placeholder="Specify assessment component, question numbering, or totaling discrepancy for your faculty..."
                   className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
                 />
               </div>
 
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Requested Internal Marks (Optional)</label>
+                <label className="block font-bold text-slate-700 mb-1">Requested Internal Marks (/40, Optional)</label>
                 <input
                   type="number"
                   step="0.5"
@@ -1239,7 +1146,7 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   min="0"
                   value={requestedMarks}
                   onChange={(e) => setRequestedMarks(e.target.value)}
-                  placeholder="e.g. 36.0"
+                  placeholder="e.g. 36.0 (Out of 40)"
                   className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
                 />
               </div>
@@ -1250,22 +1157,35 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                 </div>
               )}
 
-              <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+              <div className="flex justify-between items-center pt-2 border-t border-slate-100">
                 <button
                   type="button"
-                  onClick={() => setSelectedResult(null)}
-                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold"
+                  onClick={() => {
+                    const temp = selectedResult;
+                    setSelectedResult(null);
+                    setSelectedResultForReval(temp);
+                  }}
+                  className="text-xs font-bold text-amber-700 hover:underline"
                 >
-                  Close
+                  External Exam Issue? Apply Revaluation &rarr;
                 </button>
-                <button
-                  type="submit"
-                  disabled={submittingReq}
-                  className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1.5"
-                >
-                  <Send className="h-3.5 w-3.5" />
-                  {submittingReq ? 'Submitting...' : 'Submit Request'}
-                </button>
+                <div className="flex space-x-2">
+                  <button
+                    type="button"
+                    onClick={() => setSelectedResult(null)}
+                    className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold"
+                  >
+                    Close
+                  </button>
+                  <button
+                    type="submit"
+                    disabled={submittingReq}
+                    className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold flex items-center gap-1.5"
+                  >
+                    <Send className="h-3.5 w-3.5" />
+                    {submittingReq ? 'Submitting...' : 'Send Grievance to Faculty'}
+                  </button>
+                </div>
               </div>
             </form>
           </div>
@@ -1278,21 +1198,31 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
           <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
             <div className="flex justify-between items-start border-b border-slate-100 pb-3">
               <div>
-                <h3 className="text-base font-bold text-slate-900">Apply for External Revaluation</h3>
+                <h3 className="text-base font-bold text-slate-900">Apply for Statutory External Revaluation</h3>
                 <p className="text-xs text-slate-500">Course: {selectedResultForReval.offering?.course?.code} — Current External: {selectedResultForReval.externalMarks}/60</p>
               </div>
               <button onClick={() => setSelectedResultForReval(null)} className="text-slate-400 hover:text-slate-700">✕</button>
             </div>
 
+            <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-xs text-amber-900 space-y-1">
+              <div className="font-bold flex items-center gap-1.5">
+                <RotateCcw className="h-3.5 w-3.5 text-amber-700" />
+                Statutory Examination Regulation:
+              </div>
+              <p className="text-[11px] leading-relaxed">
+                For external examination marks (/60), students can <strong>strictly only apply for statutory revaluation</strong>. Students <strong>cannot request specific numeric target marks</strong>. Your physical/OMR answer paper will be independently re-scrutinized by an external examiner appointed by the Exam Board.
+              </p>
+            </div>
+
             <form onSubmit={handleApplyRevaluation} className="space-y-4 text-xs">
               <div>
-                <label className="block font-bold text-slate-700 mb-1">Grievance Justification *</label>
+                <label className="block font-bold text-slate-700 mb-1">Statutory Grounds for Revaluation *</label>
                 <textarea
                   required
                   rows={3}
                   value={revalReason}
                   onChange={(e) => setRevalReason(e.target.value)}
-                  placeholder="Detail grounds for external revaluation review..."
+                  placeholder="State specific questions or sections believed to have totaling or evaluation discrepancy..."
                   className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-amber-500 text-xs"
                 />
               </div>
@@ -1317,7 +1247,194 @@ export const StudentDashboard: React.FC<StudentDashboardProps> = ({
                   className="px-4 py-2 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold flex items-center gap-1.5"
                 >
                   <RotateCcw className="h-3.5 w-3.5" />
-                  {submittingReval ? 'Submitting...' : 'Confirm Revaluation'}
+                  {submittingReval ? 'Submitting...' : 'Submit for Statutory Revaluation'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL: UNIVERSAL GRIEVANCE SUBMISSION (FACULTY INTERNAL VS EXAM ADMIN EXTERNAL) */}
+      {showNewGrievanceModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4 max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                  Raise Academic Grievance
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Select destination authority: Faculty (Internal Marks) or Exam Admin (External Marks Revaluation).
+                </p>
+              </div>
+              <button
+                onClick={() => setShowNewGrievanceModal(false)}
+                className="text-slate-400 hover:text-slate-700"
+              >
+                ✕
+              </button>
+            </div>
+
+            <form onSubmit={handleUniversalGrievanceSubmit} className="space-y-4 text-xs">
+              {/* Course Selection */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Select Course / Subject *</label>
+                <select
+                  required
+                  value={grievanceCourseResultId}
+                  onChange={(e) => setGrievanceCourseResultId(e.target.value)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 font-semibold text-xs bg-white focus:ring-2 focus:ring-indigo-500"
+                >
+                  <option value="">-- Choose Course --</option>
+                  {results.map((r: any) => (
+                    <option key={r.id} value={r.id}>
+                      [{r.offering?.course?.code}] {r.offering?.course?.title} (Int: {r.internalMarks}/40, Ext: {r.externalMarks}/60, Total: {r.totalMarks}/100)
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              {/* Authority Selection Channel */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-2">Grievance Destination Authority *</label>
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <button
+                    type="button"
+                    onClick={() => setGrievanceChannel('INTERNAL_FACULTY')}
+                    className={`p-3.5 rounded-xl border text-left transition ${
+                      grievanceChannel === 'INTERNAL_FACULTY'
+                        ? 'border-indigo-600 bg-indigo-50/70 ring-2 ring-indigo-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-indigo-600 inline-block" />
+                      Course Faculty
+                    </div>
+                    <div className="text-[11px] font-semibold text-indigo-700 mt-1">Internal Marks (/40)</div>
+                    <div className="text-[10px] text-slate-500 mt-1 leading-snug">
+                      Directly reviewed &amp; approved by course instructor without Exam Admin permission.
+                    </div>
+                  </button>
+
+                  <button
+                    type="button"
+                    onClick={() => setGrievanceChannel('EXTERNAL_EXAM_ADMIN')}
+                    className={`p-3.5 rounded-xl border text-left transition ${
+                      grievanceChannel === 'EXTERNAL_EXAM_ADMIN'
+                        ? 'border-amber-600 bg-amber-50/70 ring-2 ring-amber-500/20'
+                        : 'border-slate-200 bg-white hover:bg-slate-50'
+                    }`}
+                  >
+                    <div className="font-bold text-slate-900 flex items-center gap-1.5">
+                      <span className="w-2 h-2 rounded-full bg-amber-600 inline-block" />
+                      Examination Admin
+                    </div>
+                    <div className="text-[11px] font-semibold text-amber-700 mt-1">External Marks (/60)</div>
+                    <div className="text-[10px] text-slate-500 mt-1 leading-snug">
+                      Statutory Revaluation appeal evaluated by external examination board.
+                    </div>
+                  </button>
+                </div>
+              </div>
+
+              {/* Informational Guidance Banner */}
+              {grievanceChannel === 'INTERNAL_FACULTY' ? (
+                <div className="p-3 bg-indigo-50 border border-indigo-200 rounded-lg text-[11px] text-indigo-900 space-y-1">
+                  <div className="font-bold">Direct Faculty Resolution:</div>
+                  <p className="leading-relaxed">
+                    This request goes directly to your assigned course faculty. Your instructor has full authority to directly update your internal assessment marks. Changes reflect immediately on your student dashboard and Exam Admin portal.
+                  </p>
+                </div>
+              ) : (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-[11px] text-amber-900 space-y-1">
+                  <div className="font-bold">Statutory External Revaluation Regulation:</div>
+                  <p className="leading-relaxed">
+                    Per examination regulations, students cannot request arbitrary numerical target marks for external papers. Your physical/OMR answer sheet will be re-scrutinized independently by the exam board.
+                  </p>
+                </div>
+              )}
+
+              {/* Grievance Reason Field */}
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">
+                  {grievanceChannel === 'INTERNAL_FACULTY' ? 'Reason for Internal Grievance *' : 'Statutory Grounds for External Revaluation *'}
+                </label>
+                <textarea
+                  required
+                  rows={3}
+                  value={universalReason}
+                  onChange={(e) => setUniversalReason(e.target.value)}
+                  placeholder={
+                    grievanceChannel === 'INTERNAL_FACULTY'
+                      ? 'Specify question number, missing step marks, or assessment component discrepancy for your instructor...'
+                      : 'Detail specific grounds, questions, or sections with totaling/evaluation discrepancy for external board review...'
+                  }
+                  className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                />
+              </div>
+
+              {/* Optional Requested Marks for Faculty Internal Grievance */}
+              {grievanceChannel === 'INTERNAL_FACULTY' && (
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Requested Revised Internal Marks (/40, Optional)</label>
+                  <input
+                    type="number"
+                    step="0.5"
+                    min="0"
+                    max="40"
+                    value={universalRequestedMarks}
+                    onChange={(e) => setUniversalRequestedMarks(e.target.value)}
+                    placeholder="e.g. 36.5 (Out of 40)"
+                    className="w-full border border-slate-300 rounded-lg p-2.5 focus:ring-2 focus:ring-indigo-500 text-xs"
+                  />
+                </div>
+              )}
+
+              {universalFeedback && (
+                <div
+                  className={`p-3 rounded-lg text-xs font-semibold ${
+                    universalFeedback.type === 'success'
+                      ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
+                      : 'bg-rose-50 text-rose-800 border border-rose-200'
+                  }`}
+                >
+                  {universalFeedback.text}
+                </div>
+              )}
+
+              <div className="flex justify-end space-x-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setShowNewGrievanceModal(false)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold"
+                >
+                  Close
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingUniversalGrievance}
+                  className={`px-4 py-2 text-white rounded-lg font-bold flex items-center gap-1.5 shadow-sm transition ${
+                    grievanceChannel === 'INTERNAL_FACULTY'
+                      ? 'bg-indigo-600 hover:bg-indigo-700'
+                      : 'bg-amber-600 hover:bg-amber-700'
+                  }`}
+                >
+                  {submittingUniversalGrievance ? (
+                    'Submitting...'
+                  ) : grievanceChannel === 'INTERNAL_FACULTY' ? (
+                    <>
+                      <Send className="h-3.5 w-3.5" />
+                      Submit Grievance to Faculty
+                    </>
+                  ) : (
+                    <>
+                      <RotateCcw className="h-3.5 w-3.5" />
+                      Submit Revaluation to Exam Admin
+                    </>
+                  )}
                 </button>
               </div>
             </form>

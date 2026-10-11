@@ -26,7 +26,11 @@ import {
   FileCheck,
   Send,
   HelpCircle,
-  UserCheck
+  UserCheck,
+  Flame,
+  Tag,
+  PlusCircle,
+  Image as ImageIcon
 } from 'lucide-react';
 import {
   ResponsiveContainer,
@@ -91,6 +95,15 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
   const [proposedMarks, setProposedMarks] = useState<number>(36);
   const [submittingReview, setSubmittingReview] = useState<boolean>(false);
 
+  // Announcement Creation
+  const [newAnnouncement, setNewAnnouncement] = useState({
+    title: '',
+    content: '',
+    category: 'ACADEMIC' as 'ACADEMIC' | 'EXAMINATION' | 'CAMPUS' | 'URGENT',
+    imageData: '',
+  });
+  const [submittingAnnouncement, setSubmittingAnnouncement] = useState<boolean>(false);
+
   // Notification Toast
   const [notification, setNotification] = useState<{ type: 'success' | 'error' | 'info'; text: string } | null>(null);
 
@@ -101,25 +114,55 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
   const loadFacultyData = async () => {
     try {
       setLoading(true);
-      const [offRes, timeRes, annRes] = await Promise.all([
+      const [offRes, timeRes, annRes, corrRes] = await Promise.all([
         api.getOfferings(),
         api.getTimetable(),
         api.getAnnouncements(),
+        api.getCorrectionRequests().catch(() => ({ requests: [] })),
       ]);
 
       const allOfferings = offRes.offerings || [];
-      setOfferings(allOfferings);
+      // Filter offerings where this faculty member has a teaching assignment
+      const myAssigned = allOfferings.filter((o: any) =>
+        o.teachingAssignments?.some(
+          (ta: any) =>
+            (ta.faculty?.id === currentUser?.id || ta.facultyId === currentUser?.id || ta.faculty?.email === currentUser?.email) &&
+            ta.isActive
+        )
+      );
+
+      const activeOfferings = myAssigned.length > 0 ? myAssigned : allOfferings;
+      setOfferings(activeOfferings);
       setTimetableSlots(timeRes.slots || []);
       setAnnouncements(annRes.announcements || []);
+      setCorrectionRequests(corrRes.requests || []);
 
-      if (allOfferings.length > 0) {
-        setSelectedOfferingId(allOfferings[0].id);
+      if (activeOfferings.length > 0) {
+        setSelectedOfferingId((prev) => (activeOfferings.some((o: any) => o.id === prev) ? prev : activeOfferings[0].id));
       }
     } catch (err: any) {
       console.error(err);
       setNotification({ type: 'error', text: 'Failed to load initial faculty data' });
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleCreateAnnouncement = async (e: React.FormEvent) => {
+    e.preventDefault();
+    try {
+      setSubmittingAnnouncement(true);
+      const res = await api.createAnnouncement(newAnnouncement);
+      setNotification({ type: 'success', text: 'Announcement published successfully! Visible across all portals.' });
+      setNewAnnouncement({ title: '', content: '', category: 'ACADEMIC', imageData: '' });
+      if (res?.announcement) {
+        setAnnouncements((prev) => [res.announcement, ...prev]);
+      }
+      loadFacultyData();
+    } catch (err: any) {
+      setNotification({ type: 'error', text: err.data?.message || err.message });
+    } finally {
+      setSubmittingAnnouncement(false);
     }
   };
 
@@ -134,37 +177,39 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
       setLoading(true);
       setConflictState(null);
       const [marksRes, attRes] = await Promise.all([
-        api.getOfferingMarks(offeringId),
+        api.getOfferingMarks(offeringId).catch((err) => {
+          console.warn('Could not load marks for offering:', err);
+          return null;
+        }),
         api.getAttendance(offeringId).catch(() => ({ sessions: [] })),
       ]);
 
-      setOfferingData(marksRes);
-      setAttendanceSessions(attRes.sessions || []);
-
-      // Initialize marks state
-      const initialMarks: Record<string, any> = {};
-      (marksRes.marks || []).forEach((m: any) => {
-        initialMarks[m.id] = {
-          marksObtained: m.marksObtained,
-          isAbsent: m.isAbsent,
-          version: m.version,
-        };
-      });
-      setMarksState(initialMarks);
-
-      // Initialize default attendance for roster
-      const initialAtt: Record<string, boolean> = {};
-      (marksRes.offering?.enrollments || []).forEach((enr: any) => {
-        initialAtt[enr.student.id] = true;
-      });
-      setAttendanceRecords(initialAtt);
-    } catch (err: any) {
-      if (err.status === 403) {
-        setNotification({
-          type: 'error',
-          text: `Access Restricted (HTTP 403): ${err.data?.message || 'You do not have an active teaching assignment for this course offering.'}`,
+      if (marksRes) {
+        setOfferingData(marksRes);
+        // Initialize marks state
+        const initialMarks: Record<string, any> = {};
+        (marksRes.marks || []).forEach((m: any) => {
+          initialMarks[m.id] = {
+            marksObtained: m.marksObtained,
+            isAbsent: m.isAbsent,
+            version: m.version,
+          };
         });
+        setMarksState(initialMarks);
+
+        // Initialize default attendance for roster
+        const initialAtt: Record<string, boolean> = {};
+        (marksRes.offering?.enrollments || []).forEach((enr: any) => {
+          initialAtt[enr.student.id] = true;
+        });
+        setAttendanceRecords(initialAtt);
+      } else {
+        const fallbackOff = offerings.find((o) => o.id === offeringId);
+        setOfferingData({ offering: fallbackOff, marks: [] });
       }
+      setAttendanceSessions(attRes?.sessions || []);
+    } catch (err: any) {
+      console.error(err);
     } finally {
       setLoading(false);
     }
@@ -345,10 +390,13 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
       );
       setNotification({
         type: 'success',
-        text: `Correction review submitted (${reviewAction}). Routed to Examination Admin for final statutory authorization.`,
+        text: reviewAction === 'PROPOSE'
+          ? `Internal marks updated to ${proposedMarks}/40 directly by faculty! Result recalculated and updated across Student and Exam Admin portals.`
+          : 'Grievance rejected.',
       });
       setSelectedCorrection(null);
       loadOfferingDetails(selectedOfferingId);
+      loadFacultyData();
     } catch (err: any) {
       setNotification({ type: 'error', text: err.data?.message || err.message });
     } finally {
@@ -356,7 +404,7 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
     }
   };
 
-  const selectedOffering = offerings.find((o) => o.id === selectedOfferingId);
+  const selectedOffering = offerings.find((o) => o.id === selectedOfferingId) || offeringData?.offering;
   const enrollments = offeringData?.offering?.enrollments || [];
   const marks = offeringData?.marks || [];
   const components = offeringData?.offering?.components || [];
@@ -368,22 +416,18 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
     max: m.component?.maxMarks || 15,
   }));
 
-  // Sidebar Items strictly matching prompt Section 7
+  // Sidebar Items strictly matching user instruction: separated by Academic Year & Section
   const navItems: NavItem[] = [
     { id: 'dashboard', label: 'Dashboard', icon: LayoutDashboard },
-    { id: 'assigned-courses', label: 'Assigned Courses', icon: BookOpen },
-    { id: 'sections', label: 'My Sections', icon: Layers },
     { id: 'roster', label: 'Student Roster', icon: Users, badge: enrollments.length || undefined },
     { id: 'timetable', label: 'My Timetable', icon: Calendar },
     { id: 'attendance', label: 'Attendance Management', icon: ClipboardList },
     { id: 'internal-marks', label: 'Internal Marks Entry', icon: FileText },
-    { id: 'submission', label: 'Assessment Submission', icon: Lock },
-    { id: 'corrections', label: 'Correction Requests', icon: AlertTriangle },
-    { id: 'performance', label: 'Class Performance', icon: TrendingUp },
+    { id: 'corrections', label: 'Correction Requests', icon: AlertTriangle, badge: correctionRequests.length || undefined },
     { id: 'history', label: 'Assignment History', icon: History },
-    { id: 'announcements', label: 'Announcements', icon: Bell },
-    { id: 'scenario-a', label: 'OCC Concurrency Test (A)', icon: Shield },
-    { id: 'campushub', label: 'Campus Hub', icon: Compass },
+    { id: 'announcements', label: 'Announcements', icon: Bell, badge: announcements.length || undefined },
+    { id: 'trending-events', label: 'Trending Events', icon: Flame },
+    { id: 'lost-found', label: 'Lost & Found', icon: Tag },
   ];
 
   const handleNavSelect = (id: string) => {
@@ -988,151 +1032,111 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
           </div>
         )}
 
-        {/* TAB: ASSIGNED COURSES */}
-        {activeTab === 'assigned-courses' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <BookOpen className="h-5 w-5 text-indigo-600" />
-                Teaching Assignments &amp; Course Syllabus
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {assignedOfferings.map((off) => (
-                  <div key={off.id} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-3">
-                    <div className="flex justify-between items-start">
-                      <span className="font-mono font-bold text-xs bg-indigo-100 text-indigo-800 px-2 py-0.5 rounded">
-                        {off.course?.code}
-                      </span>
-                      <span className="text-xs bg-emerald-100 text-emerald-800 font-bold px-2 py-0.5 rounded">
-                        Active Term
-                      </span>
-                    </div>
-                    <div className="font-bold text-slate-900 text-base">{off.course?.title}</div>
-                    <div className="text-xs text-slate-600 space-y-1 pt-2 border-t border-slate-200">
-                      <div>Department: <span className="font-semibold text-slate-800">{off.course?.department?.name}</span></div>
-                      <div>Batch &amp; Section: <span className="font-semibold text-slate-800">{off.batch?.name} • Sec {off.section?.name}</span></div>
-                      <div>Credits: <span className="font-semibold text-slate-800">{off.course?.credits} Credits</span></div>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: MY SECTIONS */}
-        {activeTab === 'sections' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Layers className="h-5 w-5 text-indigo-600" />
-                Assigned Student Sections &amp; Class Cohorts
-              </h2>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                {assignedOfferings.map((off) => (
-                  <div key={off.id} className="p-5 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                    <div className="flex justify-between items-center">
-                      <span className="text-base font-black text-slate-900">
-                        {off.batch?.name} — Section {off.section?.name}
-                      </span>
-                      <span className="text-xs font-mono font-bold text-indigo-700 bg-indigo-50 px-2 py-0.5 rounded border border-indigo-200">
-                        {off.course?.code}
-                      </span>
-                    </div>
-                    <p className="text-xs text-slate-600">
-                      Enrolled Students: <span className="font-bold text-slate-900">{enrollments.length}</span>
-                    </p>
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        onClick={() => { setSelectedOfferingId(off.id); setActiveTab('roster'); }}
-                        className="px-3 py-1.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded font-bold text-xs"
-                      >
-                        View Student Roster
-                      </button>
-                      <button
-                        onClick={() => { setSelectedOfferingId(off.id); setActiveTab('attendance'); }}
-                        className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded font-bold text-xs"
-                      >
-                        Record Attendance
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: ASSESSMENT SUBMISSION */}
-        {activeTab === 'submission' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Lock className="h-5 w-5 text-indigo-600" />
-                Assessment Submission &amp; Examination Locking
-              </h2>
-              <p className="text-xs text-slate-500">
-                Finalize internal marks for submission to the Examination Branch. Once submitted, marks are locked against accidental modification.
-              </p>
-              <div className="p-5 bg-amber-50 rounded-xl border border-amber-200 space-y-3">
-                <div className="font-bold text-amber-900 text-sm">Course Offering: {selectedOffering?.course?.code} — {selectedOffering?.course?.title}</div>
-                <p className="text-xs text-amber-800">
-                  Total student marks entered: {marksList.length}. Submitting will forward internal marks to the Examination Branch for official grade calculations.
-                </p>
-                <button
-                  onClick={handleSubmitOfferingMarks}
-                  disabled={submittingMarks}
-                  className="px-5 py-2.5 bg-amber-600 hover:bg-amber-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50"
-                >
-                  <Lock className="h-4 w-4" />
-                  {submittingMarks ? 'Locking & Submitting...' : 'Confirm Submission to Examination Branch'}
-                </button>
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* TAB: CORRECTION REQUESTS */}
         {activeTab === 'corrections' && (
           <div className="space-y-6">
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <AlertTriangle className="h-5 w-5 text-indigo-600" />
-                Student Result Correction Requests
-              </h2>
-              <p className="text-xs text-slate-500">
-                Review student-initiated mark grievances. Faculty verifies the evaluation and proposes updated marks to the Examination Admin.
-              </p>
-              <div className="p-6 bg-slate-50 rounded-xl border border-slate-200 text-center text-xs text-slate-500">
-                No pending correction requests requiring review for this course offering.
+              <div className="flex justify-between items-start">
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
+                    <AlertTriangle className="h-5 w-5 text-indigo-600" />
+                    Student Result Correction Requests
+                  </h2>
+                  <p className="text-xs text-slate-500 mt-1">
+                    Review student-initiated mark grievances. Faculty verifies the evaluation and proposes updated marks to the Examination Admin. Both must accept before marks reflect on student records.
+                  </p>
+                </div>
+                <span className="bg-indigo-50 text-indigo-700 text-xs font-bold px-3 py-1 rounded-full border border-indigo-200">
+                  {correctionRequests.length} Total Requests
+                </span>
               </div>
-            </div>
-          </div>
-        )}
 
-        {/* TAB: CLASS PERFORMANCE */}
-        {activeTab === 'performance' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-indigo-600" />
-                Class Performance Analytics
-              </h2>
-              <div className="h-80 mt-4">
-                <ResponsiveContainer width="100%" height="100%">
-                  <BarChart data={marksList.map((m: any) => ({
-                    student: m.student?.user?.name || 'Student',
-                    marks: m.marksObtained ?? 0,
-                    max: m.component?.maxMarks || 15,
-                  }))}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
-                    <XAxis dataKey="student" stroke="#64748b" fontSize={11} />
-                    <YAxis stroke="#64748b" fontSize={12} />
-                    <Tooltip />
-                    <Bar dataKey="marks" fill="#6366f1" radius={[4, 4, 0, 0]} name="Marks Obtained" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </div>
+              {correctionRequests.length === 0 ? (
+                <div className="p-8 text-center bg-slate-50 rounded-xl border border-slate-200 text-xs text-slate-500">
+                  No pending correction requests requiring review for your assigned courses.
+                </div>
+              ) : (
+                <div className="space-y-4">
+                  {correctionRequests.map((req) => {
+                    const isPending = req.status === 'PENDING_FACULTY';
+                    return (
+                      <div
+                        key={req.id}
+                        className={`p-5 rounded-xl border transition ${
+                          isPending
+                            ? 'bg-amber-50/50 border-amber-300 shadow-sm'
+                            : 'bg-white border-slate-200'
+                        }`}
+                      >
+                        <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-2 pb-3 border-b border-slate-100">
+                          <div>
+                            <span className="font-bold text-sm text-slate-900">
+                              {req.student?.user?.name} ({req.student?.rollNumber})
+                            </span>
+                            <span className="text-xs text-slate-500 ml-2 font-mono">
+                              {req.offering?.course?.code} — {req.offering?.course?.title}
+                            </span>
+                          </div>
+                          <span
+                            className={`text-[10px] font-bold px-2.5 py-1 rounded-full uppercase ${
+                              req.status === 'PENDING_FACULTY'
+                                ? 'bg-amber-100 text-amber-800 border border-amber-300'
+                                : req.status === 'PROPOSED_BY_FACULTY'
+                                ? 'bg-blue-100 text-blue-800 border border-blue-300'
+                                : req.status === 'APPROVED_BY_EXAM_ADMIN'
+                                ? 'bg-emerald-100 text-emerald-800 border border-emerald-300'
+                                : 'bg-rose-100 text-rose-800 border border-rose-300'
+                            }`}
+                          >
+                            {req.status === 'PENDING_FACULTY' ? 'Pending Faculty Review' : req.status}
+                          </span>
+                        </div>
+
+                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4 py-3 text-xs">
+                          <div>
+                            <span className="font-bold text-slate-600 block">Student Justification:</span>
+                            <p className="text-slate-800 mt-1 bg-slate-100 p-2.5 rounded">{req.reason}</p>
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-600 block">Marks Breakdown:</span>
+                            <div className="mt-1 space-y-1 text-slate-700">
+                              <div>Current Internal: <span className="font-bold">{req.result?.internalMarks ?? '-'} / 40</span></div>
+                              <div>Requested Marks: <span className="font-bold text-indigo-700">{req.requestedMarks ?? 'Review Requested'}</span></div>
+                              {req.proposedMarks !== null && req.proposedMarks !== undefined && (
+                                <div>Faculty Proposed: <span className="font-bold text-blue-700">{req.proposedMarks} / 40</span></div>
+                              )}
+                            </div>
+                          </div>
+                          <div>
+                            <span className="font-bold text-slate-600 block">Review Audit &amp; Status:</span>
+                            <div className="mt-1 text-slate-600 space-y-1">
+                              {req.facultyReviewReason && <div>Faculty Justification: <span className="italic">"{req.facultyReviewReason}"</span></div>}
+                              {req.examAdminReason && <div>Exam Admin Authorization: <span className="italic">"{req.examAdminReason}"</span></div>}
+                              <div className="text-[10px] text-slate-400 font-mono mt-1">Submitted: {new Date(req.createdAt).toLocaleString()}</div>
+                            </div>
+                          </div>
+                        </div>
+
+                        {isPending && (
+                          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
+                            <button
+                              onClick={() => {
+                                setSelectedCorrection(req);
+                                setProposedMarks(req.requestedMarks || req.result?.internalMarks || 35);
+                              }}
+                              className="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-1.5"
+                            >
+                              <AlertTriangle className="h-3.5 w-3.5" />
+                              Review Grievance &amp; Propose to Exam Admin
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
+              )}
             </div>
           </div>
         )}
@@ -1140,84 +1144,240 @@ export const FacultyDashboard: React.FC<FacultyDashboardProps> = ({
         {/* TAB: ANNOUNCEMENTS */}
         {activeTab === 'announcements' && (
           <div className="space-y-6">
+            {/* Publish Form */}
             <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
               <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
                 <Bell className="h-5 w-5 text-indigo-600" />
-                Campus &amp; Academic Announcements
+                Publish Institutional or Course Announcement
               </h2>
-              <div className="p-4 bg-slate-50 rounded-xl border border-slate-200 space-y-2">
-                <div className="font-bold text-sm text-slate-900">Mid-Semester Marks Entry Cutoff Notice</div>
-                <p className="text-xs text-slate-600">
-                  All teaching faculty are requested to complete Mid-1 and Mid-2 internal assessment marks entry before the upcoming statutory senate deadline.
-                </p>
-                <div className="text-[10px] text-slate-400">Office of the Dean of Academic Affairs</div>
-              </div>
-            </div>
-          </div>
-        )}
-
-        {/* TAB: SCENARIO A OCC CONCURRENCY TEST */}
-        {activeTab === 'scenario-a' && (
-          <div className="space-y-6">
-            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
-              <h2 className="text-lg font-bold text-slate-900 flex items-center gap-2">
-                <Shield className="h-5 w-5 text-indigo-600" />
-                Scenario A: Optimistic Concurrency Control (OCC) Live Test Suite
-              </h2>
-              <p className="text-xs text-slate-500">
-                Demonstrates collision avoidance when concurrent faculty sessions edit the same mark record simultaneously.
-              </p>
-              <div className="p-5 bg-indigo-50 border border-indigo-200 rounded-xl space-y-3">
-                <p className="text-xs text-indigo-900 leading-relaxed">
-                  Trigger an automated stale concurrency collision against PostgreSQL 18. Session A advances the record version while Session B submits with a stale version, returning an HTTP 409 Conflict.
-                </p>
-                <button
-                  onClick={handleSimulateConcurrencyConflict}
-                  disabled={simulatingConflict}
-                  className="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold text-xs shadow-sm flex items-center gap-2 disabled:opacity-50"
-                >
-                  <RefreshCw className={`h-4 w-4 ${simulatingConflict ? 'animate-spin' : ''}`} />
-                  {simulatingConflict ? 'Executing Concurrent Writes...' : 'Simulate Stale Concurrent Collision (HTTP 409)'}
-                </button>
-              </div>
-
-              {concurrencyConflict && (
-                <div className="p-5 bg-rose-50 border border-rose-300 rounded-xl space-y-4">
-                  <div className="flex items-center gap-2 text-rose-900 font-bold text-sm">
-                    <AlertTriangle className="h-5 w-5 text-rose-600" />
-                    HTTP 409 Conflict: Concurrent Modification Conflict Detected
+              <form onSubmit={handleCreateAnnouncement} className="space-y-4 text-xs">
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Title *</label>
+                    <input
+                      type="text"
+                      required
+                      value={newAnnouncement.title}
+                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, title: e.target.value })}
+                      placeholder="e.g. Mid-Semester Lab Assessment Guidelines"
+                      className="w-full border border-slate-300 rounded-lg p-2.5 font-bold text-xs"
+                    />
                   </div>
-                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
-                    <div className="p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="font-bold text-slate-700">Your Stale Submission:</div>
-                      <div className="text-rose-600 font-mono font-bold mt-1">Version: {concurrencyConflict.staleVersion}</div>
-                      <div className="text-slate-600 font-mono">Attempted Marks: {concurrencyConflict.staleMarks}</div>
-                    </div>
-                    <div className="p-3 bg-white rounded-lg border border-rose-200">
-                      <div className="font-bold text-slate-700">Current Database State:</div>
-                      <div className="text-emerald-600 font-mono font-bold mt-1">Version: {concurrencyConflict.serverVersion}</div>
-                      <div className="text-slate-900 font-mono font-bold">Server Marks: {concurrencyConflict.serverData?.marksObtained}</div>
-                    </div>
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Category *</label>
+                    <select
+                      value={newAnnouncement.category}
+                      onChange={(e) => setNewAnnouncement({ ...newAnnouncement, category: e.target.value as any })}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 font-semibold text-xs"
+                    >
+                      <option value="ACADEMIC">ACADEMIC</option>
+                      <option value="EXAMINATION">EXAMINATION</option>
+                      <option value="CAMPUS">CAMPUS</option>
+                      <option value="URGENT">URGENT</option>
+                    </select>
                   </div>
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Notice Content *</label>
+                  <textarea
+                    required
+                    rows={3}
+                    value={newAnnouncement.content}
+                    onChange={(e) => setNewAnnouncement({ ...newAnnouncement, content: e.target.value })}
+                    placeholder="Provide detailed notice body for students and faculty..."
+                    className="w-full border border-slate-300 rounded-lg p-2.5 text-xs"
+                  />
+                </div>
+
+                <div>
+                  <label className="block font-bold text-slate-700 mb-1">Attach Image (Optional)</label>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    onChange={(e) => {
+                      const file = e.target.files?.[0];
+                      if (file) {
+                        const reader = new FileReader();
+                        reader.onload = () => {
+                          setNewAnnouncement((prev) => ({ ...prev, imageData: reader.result as string }));
+                        };
+                        reader.readAsDataURL(file);
+                      }
+                    }}
+                    className="w-full border border-slate-300 rounded-lg p-2 text-xs"
+                  />
+                  {newAnnouncement.imageData && (
+                    <div className="mt-2 h-28 w-44 rounded-lg overflow-hidden border border-slate-200">
+                      <img src={newAnnouncement.imageData} alt="Preview" className="h-full w-full object-cover" />
+                    </div>
+                  )}
+                </div>
+
+                <div className="flex justify-end">
                   <button
-                    onClick={handleResolveConflictByReloading}
-                    className="px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white rounded-lg font-bold text-xs"
+                    type="submit"
+                    disabled={submittingAnnouncement}
+                    className="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-lg font-bold shadow-sm disabled:opacity-50"
                   >
-                    Reload &amp; Accept Latest Server State
+                    {submittingAnnouncement ? 'Publishing...' : '+ Publish Notice'}
                   </button>
                 </div>
-              )}
+              </form>
+            </div>
+
+            {/* Announcements List */}
+            <div className="bg-white rounded-xl shadow-sm border border-slate-200 p-6 space-y-4">
+              <h3 className="text-base font-bold text-slate-900">Active Notice Board ({announcements.length})</h3>
+              <div className="space-y-4">
+                {announcements.map((ann) => (
+                  <div key={ann.id} className="p-5 rounded-xl border border-slate-200 bg-slate-50/50 space-y-3">
+                    <div className="flex justify-between items-center text-xs">
+                      <span className={`font-bold px-2 py-0.5 rounded text-[10px] ${
+                        ann.category === 'URGENT'
+                          ? 'bg-rose-100 text-rose-800'
+                          : ann.category === 'EXAMINATION'
+                          ? 'bg-amber-100 text-amber-800'
+                          : ann.category === 'CAMPUS'
+                          ? 'bg-emerald-100 text-emerald-800'
+                          : 'bg-indigo-100 text-indigo-800'
+                      }`}>
+                        {ann.category}
+                      </span>
+                      <span className="text-slate-400 font-mono text-[11px]">{new Date(ann.createdAt).toLocaleString()}</span>
+                    </div>
+                    <h4 className="text-sm font-bold text-slate-900">{ann.title}</h4>
+                    {ann.imageUrl && (
+                      <div className="rounded-lg overflow-hidden max-h-72 w-full bg-slate-100 border border-slate-200">
+                        <img
+                          src={ann.imageUrl}
+                          alt={ann.title}
+                          className="w-full h-full object-cover"
+                          onError={(e) => {
+                            (e.target as HTMLElement).style.display = 'none';
+                          }}
+                        />
+                      </div>
+                    )}
+                    <p className="text-xs text-slate-700 leading-relaxed whitespace-pre-line">{ann.content}</p>
+                    <div className="text-[10px] text-slate-400 pt-2 border-t border-slate-200">
+                      Published by: {ann.createdBy?.name || 'Faculty'} • {ann.createdBy?.role || 'FACULTY'}
+                    </div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
         )}
 
-        {/* TAB: CAMPUS HUB EMBEDDED */}
-        {activeTab === 'campushub' && (
+        {/* TAB: TRENDING EVENTS (CAMPUS HUB) */}
+        {activeTab === 'trending-events' && (
           <div className="space-y-4">
             <CampusHub currentUser={currentUser} initialTab="EVENTS" embedded={true} />
           </div>
         )}
+
+        {/* TAB: LOST & FOUND (CAMPUS HUB) */}
+        {activeTab === 'lost-found' && (
+          <div className="space-y-4">
+            <CampusHub currentUser={currentUser} initialTab="LOST_FOUND" embedded={true} />
+          </div>
+        )}
       </div>
+
+      {/* MODAL: CORRECTION REVIEW */}
+      {selectedCorrection && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/60 p-4">
+          <div className="bg-white rounded-xl shadow-xl max-w-lg w-full p-6 space-y-4">
+            <div className="flex justify-between items-start border-b border-slate-100 pb-3">
+              <div>
+                <h3 className="text-base font-bold text-slate-900">Review Student Mark Grievance</h3>
+                <p className="text-xs text-slate-500">
+                  Student: {selectedCorrection.student?.user?.name} ({selectedCorrection.student?.rollNumber}) • {selectedCorrection.offering?.course?.code}
+                </p>
+              </div>
+              <button onClick={() => setSelectedCorrection(null)} className="text-slate-400 hover:text-slate-700">✕</button>
+            </div>
+
+            <form onSubmit={handleReviewCorrection} className="space-y-4 text-xs">
+              <div className="p-3 bg-slate-50 rounded-lg border border-slate-200">
+                <span className="font-bold text-slate-600 block">Student's Stated Reason:</span>
+                <p className="text-slate-800 mt-1 italic">"{selectedCorrection.reason}"</p>
+                <div className="mt-2 text-slate-700">
+                  Current Internal Marks: <span className="font-bold">{selectedCorrection.result?.internalMarks ?? '-'} / 40</span>
+                  {selectedCorrection.requestedMarks && (
+                    <span className="ml-3">Requested: <span className="font-bold text-indigo-700">{selectedCorrection.requestedMarks} / 40</span></span>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Faculty Action *</label>
+                <select
+                  value={reviewAction}
+                  onChange={(e) => setReviewAction(e.target.value as any)}
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-semibold"
+                >
+                  <option value="PROPOSE">Accept Grievance &amp; Directly Update Internal Marks</option>
+                  <option value="REJECT">Reject Grievance</option>
+                </select>
+              </div>
+
+              {reviewAction === 'PROPOSE' && (
+                <div className="space-y-3">
+                  <div>
+                    <label className="block font-bold text-slate-700 mb-1">Revised Internal Marks (Max 40) *</label>
+                    <input
+                      type="number"
+                      step="0.5"
+                      min="0"
+                      max="40"
+                      required
+                      value={proposedMarks}
+                      onChange={(e) => setProposedMarks(Number(e.target.value))}
+                      className="w-full border border-slate-300 rounded-lg p-2.5 text-xs font-mono font-bold"
+                    />
+                  </div>
+                  <div className="p-2.5 bg-emerald-50 border border-emerald-200 rounded-lg text-[11px] text-emerald-800 font-semibold">
+                    Direct Authority: Faculty updates internal marks directly. New marks and recalculated grades reflect immediately on both Student and Examination Admin portals.
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <label className="block font-bold text-slate-700 mb-1">Faculty Review Justification *</label>
+                <textarea
+                  required
+                  rows={3}
+                  value={reviewReason}
+                  onChange={(e) => setReviewReason(e.target.value)}
+                  placeholder="Document verification of test script, totaling audit, or missing step evaluation..."
+                  className="w-full border border-slate-300 rounded-lg p-2.5 text-xs"
+                />
+              </div>
+
+              <div className="flex justify-end gap-2 pt-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setSelectedCorrection(null)}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-lg font-bold"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={submittingReview}
+                  className={`px-4 py-2 text-white rounded-lg font-bold shadow-sm ${
+                    reviewAction === 'PROPOSE' ? 'bg-indigo-600 hover:bg-indigo-700' : 'bg-rose-600 hover:bg-rose-700'
+                  }`}
+                >
+                  {submittingReview ? 'Updating...' : reviewAction === 'PROPOSE' ? 'Update Internal Marks Directly' : 'Reject Grievance'}
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
     </PortalLayout>
   );
 };

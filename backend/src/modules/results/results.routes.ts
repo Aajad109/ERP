@@ -71,7 +71,25 @@ resultsRouter.get(
 resultsRouter.get('/offering/:offeringId', authenticateToken, async (req: Request, res: Response) => {
   const { offeringId } = req.params;
 
-  const results = await prisma.publishedResult.findMany({
+  const offering = await prisma.courseOffering.findUnique({
+    where: { id: offeringId },
+    include: {
+      course: { include: { department: true } },
+      batch: true,
+      section: true,
+      enrollments: {
+        include: {
+          student: { include: { user: true } },
+        },
+      },
+    },
+  });
+
+  if (!offering) {
+    return res.status(404).json({ error: 'NOT_FOUND', message: 'Course offering not found' });
+  }
+
+  const publishedResults = await prisma.publishedResult.findMany({
     where: { offeringId },
     include: {
       student: { include: { user: true } },
@@ -80,7 +98,52 @@ resultsRouter.get('/offering/:offeringId', authenticateToken, async (req: Reques
     },
   });
 
-  return res.json({ results });
+  const assessmentMarks = await prisma.assessmentMark.findMany({
+    where: { offeringId },
+    include: { component: true },
+  });
+
+  const resultMap = new Map(publishedResults.map((r) => [r.studentId, r]));
+
+  const combinedResults = offering.enrollments.map((enr) => {
+    const existing = resultMap.get(enr.studentId);
+    if (existing) {
+      return existing;
+    }
+
+    const studentMarks = assessmentMarks.filter(
+      (m) => m.studentId === enr.studentId && m.component?.type === 'INTERNAL' && m.marksObtained !== null
+    );
+    const internalSum = Math.min(40, studentMarks.reduce((acc, m) => acc + (m.marksObtained || 0), 0));
+
+    return {
+      id: `draft-${enr.studentId}`,
+      offeringId,
+      studentId: enr.studentId,
+      internalMarks: internalSum,
+      externalMarks: 0,
+      totalMarks: internalSum,
+      grade: '-',
+      gradePoint: 0,
+      currentVersion: 0,
+      publicationState: 'DRAFT',
+      isPassed: false,
+      student: enr.student,
+      offering,
+      history: [],
+      isDraft: true,
+    };
+  });
+
+  // Also include any published results for students not in enrollments
+  const enrolledStudentIds = new Set(offering.enrollments.map((e) => e.studentId));
+  for (const pr of publishedResults) {
+    if (!enrolledStudentIds.has(pr.studentId)) {
+      combinedResults.push(pr as any);
+    }
+  }
+
+  return res.json({ results: combinedResults });
 });
 
 /**
@@ -470,6 +533,73 @@ const requestCorrectionSchema = z.object({
   requestedMarks: z.number().min(0).max(100).optional(),
 });
 
+/**
+ * Fetch Correction Requests for Student, Faculty, or Exam Admin
+ */
+resultsRouter.get('/correction-requests', authenticateToken, async (req: Request, res: Response) => {
+  try {
+    const userRole = req.user!.role;
+    let whereClause: any = {};
+
+    if (userRole === 'STUDENT') {
+      const student = await prisma.studentProfile.findFirst({
+        where: { userId: req.user!.id },
+      });
+      if (!student) {
+        return res.json({ requests: [] });
+      }
+      whereClause.studentId = student.id;
+    } else if (userRole === 'FACULTY') {
+      const assignments = await prisma.teachingAssignment.findMany({
+        where: { facultyId: req.user!.id, isActive: true },
+        select: { offeringId: true },
+      });
+      const offeringIds = assignments.map((a) => a.offeringId);
+      whereClause.offeringId = { in: offeringIds };
+    } else if (userRole === 'EXAM_ADMIN') {
+      if (req.user!.designatedDepartmentId) {
+        whereClause.offering = {
+          course: {
+            departmentId: req.user!.designatedDepartmentId,
+          },
+        };
+      }
+    }
+
+    const requests = await prisma.correctionRequest.findMany({
+      where: whereClause,
+      include: {
+        student: {
+          include: {
+            user: { select: { id: true, name: true, email: true } },
+            department: true,
+            batch: true,
+            section: true,
+          },
+        },
+        offering: {
+          include: {
+            course: true,
+            batch: true,
+            section: true,
+            teachingAssignments: {
+              where: { isActive: true },
+              include: { faculty: { select: { id: true, name: true, email: true } } },
+            },
+          },
+        },
+        result: true,
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    return res.json({ requests });
+  } catch (err: any) {
+    console.error('Fetch correction requests error:', err);
+    return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+  }
+});
+
 resultsRouter.post(
   '/:resultId/request-correction',
   authenticateToken,
@@ -531,6 +661,7 @@ const facultyReviewSchema = z.object({
   action: z.enum(['PROPOSE', 'REJECT']),
   reason: z.string().min(5),
   proposedInternalMarks: z.number().min(0).max(40).optional(),
+  proposedMarks: z.number().min(0).max(40).optional(),
   proposedExternalMarks: z.number().min(0).max(60).optional(),
 });
 
@@ -546,7 +677,8 @@ resultsRouter.put(
         return res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });
       }
 
-      const { action, reason, proposedInternalMarks } = parseResult.data;
+      const { action, reason } = parseResult.data;
+      const proposedInternalMarks = parseResult.data.proposedInternalMarks ?? parseResult.data.proposedMarks;
 
       const corrRequest = await prisma.correctionRequest.findUnique({
         where: { id: requestId },
@@ -556,14 +688,11 @@ resultsRouter.put(
         return res.status(404).json({ error: 'NOT_FOUND', message: 'Request not found' });
       }
 
-      const now = new Date();
       const assignment = await prisma.teachingAssignment.findFirst({
         where: {
           offeringId: corrRequest.offeringId,
           facultyId: req.user!.id,
           isActive: true,
-          startDate: { lte: now },
-          OR: [{ endDate: null }, { endDate: { gte: now } }],
         },
       });
 
@@ -574,10 +703,77 @@ resultsRouter.put(
         });
       }
 
+      // If faculty approves/proposes internal marks correction, directly commit to PublishedResult
+      let updatedResult = null;
+      if (action === 'PROPOSE' && proposedInternalMarks !== undefined && corrRequest.resultId) {
+        const currentResult = await prisma.publishedResult.findUnique({
+          where: { id: corrRequest.resultId },
+          include: { offering: { include: { course: true } } },
+        });
+
+        if (currentResult) {
+          const totalMarks = Math.round((proposedInternalMarks + currentResult.externalMarks) * 100) / 100;
+          const gradeResult = calculateGrade(proposedInternalMarks, currentResult.externalMarks);
+
+          const allStudentResults = await prisma.publishedResult.findMany({
+            where: { studentId: currentResult.studentId },
+            include: { offering: { include: { course: true } } },
+          });
+
+          const allCourses = allStudentResults.map((r) =>
+            r.id === currentResult.id
+              ? { credits: r.offering.course.credits, gradePoint: gradeResult.gradePoint, isPassed: gradeResult.isPassed }
+              : { credits: r.offering.course.credits, gradePoint: r.gradePoint, isPassed: r.isPassed }
+          );
+
+          const sgpa = calculateSGPA(allCourses);
+          const cgpaEval = evaluateCGPA(allCourses);
+
+          updatedResult = await prisma.$transaction(async (tx) => {
+            const res = await tx.publishedResult.update({
+              where: { id: currentResult.id },
+              data: {
+                currentVersion: { increment: 1 },
+                internalMarks: proposedInternalMarks,
+                totalMarks,
+                grade: gradeResult.grade,
+                gradePoint: gradeResult.gradePoint,
+                isPassed: gradeResult.isPassed,
+                sgpa,
+                cgpa: cgpaEval.cgpa,
+                cgpaStatus: cgpaEval.cgpaStatus,
+              },
+            });
+
+            await tx.resultVersionHistory.create({
+              data: {
+                resultId: currentResult.id,
+                versionNumber: res.currentVersion,
+                internalMarks: proposedInternalMarks,
+                externalMarks: currentResult.externalMarks,
+                totalMarks,
+                grade: gradeResult.grade,
+                gradePoint: gradeResult.gradePoint,
+                isPassed: gradeResult.isPassed,
+                sgpa,
+                cgpa: cgpaEval.cgpa,
+                cgpaStatus: cgpaEval.cgpaStatus,
+                changeType: 'FACULTY_INTERNAL_CORRECTION',
+                correctionCategory: 'INTERNAL_EVALUATION_REVIEW',
+                reason,
+                changedByUserId: req.user!.id,
+              },
+            });
+
+            return res;
+          });
+        }
+      }
+
       const updatedRequest = await prisma.correctionRequest.update({
         where: { id: requestId },
         data: {
-          status: action === 'PROPOSE' ? 'PROPOSED_BY_FACULTY' : 'REJECTED_BY_FACULTY',
+          status: action === 'PROPOSE' ? 'RESOLVED_BY_FACULTY' : 'REJECTED_BY_FACULTY',
           facultyReviewReason: reason,
           proposedMarks: proposedInternalMarks,
           reviewedByFacultyId: req.user!.id,
@@ -588,15 +784,19 @@ resultsRouter.put(
       await logAuditEvent({
         actorUserId: req.user!.id,
         actorRole: req.user!.role,
-        action: action === 'PROPOSE' ? 'FACULTY_PROPOSED_CORRECTION' : 'FACULTY_REJECTED_CORRECTION',
+        action: action === 'PROPOSE' ? 'FACULTY_DIRECT_INTERNAL_CORRECTION' : 'FACULTY_REJECTED_CORRECTION',
         entityType: 'CorrectionRequest',
         entityId: requestId,
         reason,
-        newData: updatedRequest,
+        newData: { updatedRequest, updatedResult },
         req,
       });
 
-      return res.json({ message: `Correction request ${action.toLowerCase()}d by faculty`, request: updatedRequest });
+      return res.json({
+        message: `Internal marks correction resolved directly by faculty. Changes reflected across all portals.`,
+        request: updatedRequest,
+        result: updatedResult,
+      });
     } catch (err: any) {
       console.error('Faculty review error:', err);
       return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
@@ -624,13 +824,13 @@ resultsRouter.put(
       });
 
       if (!corrRequest) {
-        return res.status(404).json({ error: 'NOT_FOUND', message: 'Request not found' });
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'Correction request not found' });
       }
 
-      if (corrRequest.status !== 'PROPOSED_BY_FACULTY') {
+      if (corrRequest.status !== 'PROPOSED_BY_FACULTY' && corrRequest.status !== 'RESOLVED_BY_FACULTY') {
         return res.status(400).json({
           error: 'INVALID_STATE',
-          message: 'Only requests proposed by faculty can be authorized by Exam Admin',
+          message: 'Only requests reviewed by faculty can be authorized by Exam Admin',
         });
       }
 
@@ -861,7 +1061,7 @@ resultsRouter.put(
       if (!reval) return res.status(404).json({ error: 'NOT_FOUND', message: 'Revaluation request not found' });
 
       // Branch scope check
-      if (req.user!.designatedDepartmentId !== reval.result.offering.course.departmentId) {
+      if (req.user!.designatedDepartmentId && req.user!.designatedDepartmentId !== reval.result.offering.course.departmentId) {
         return res.status(403).json({ error: 'FORBIDDEN_BRANCH_SCOPE', message: 'You are not the designated Examination Admin for this branch' });
       }
 
@@ -1056,4 +1256,174 @@ resultsRouter.post(
     }
   }
 );
+
+/**
+ * End-Semester External Marks Administration (Exam Admin entry out of 60)
+ */
+const externalMarksEntrySchema = z.object({
+  offeringId: z.string().uuid(),
+  entries: z.array(
+    z.object({
+      studentId: z.string().uuid(),
+      externalMarks: z.number().min(0).max(60),
+    })
+  ),
+});
+
+resultsRouter.post(
+  '/external-marks',
+  authenticateToken,
+  requireRole('EXAM_ADMIN'),
+  async (req: Request, res: Response) => {
+    try {
+      const parsed = externalMarksEntrySchema.safeParse(req.body);
+      if (!parsed.success) {
+        return res.status(400).json({ error: 'VALIDATION_ERROR', details: parsed.error.format() });
+      }
+
+      const { offeringId, entries } = parsed.data;
+
+      const offering = await prisma.courseOffering.findUnique({
+        where: { id: offeringId },
+        include: { course: true },
+      });
+      if (!offering) {
+        return res.status(404).json({ error: 'NOT_FOUND', message: 'Course offering not found' });
+      }
+
+      if (req.user!.designatedDepartmentId && req.user!.designatedDepartmentId !== offering.course.departmentId) {
+        return res.status(403).json({
+          error: 'FORBIDDEN_BRANCH_SCOPE',
+          message: 'You are not the designated Examination Admin for this branch.',
+        });
+      }
+
+      const updatedResults = [];
+
+      for (const entry of entries) {
+        const { studentId, externalMarks } = entry;
+
+        // Check if published result already exists or if internal marks exist
+        const existingResult = await prisma.publishedResult.findUnique({
+          where: { offeringId_studentId: { offeringId, studentId } },
+        });
+
+        let internalMarks = existingResult?.internalMarks ?? 0;
+
+        // If no internal marks on published result, check assessment marks sum
+        if (!existingResult) {
+          const studentMarks = await prisma.assessmentMark.findMany({
+            where: { offeringId, studentId },
+            include: { component: true },
+          });
+          const internalSum = studentMarks
+            .filter((m) => m.component?.type === 'INTERNAL' && m.marksObtained !== null)
+            .reduce((sum, m) => sum + (m.marksObtained || 0), 0);
+          if (internalSum > 0) {
+            internalMarks = Math.min(40, internalSum);
+          }
+        }
+
+        const totalMarks = Math.round((internalMarks + externalMarks) * 100) / 100;
+        const gradeResult = calculateGrade(internalMarks, externalMarks);
+
+        // Calculate SGPA
+        const allStudentResults = await prisma.publishedResult.findMany({
+          where: { studentId },
+          include: { offering: { include: { course: true } } },
+        });
+
+        const allCourses = [
+          ...allStudentResults.filter((r) => r.offeringId !== offeringId).map((r) => ({
+            credits: r.offering.course.credits,
+            gradePoint: r.gradePoint,
+            isPassed: r.isPassed,
+          })),
+          {
+            credits: offering.course.credits,
+            gradePoint: gradeResult.gradePoint,
+            isPassed: gradeResult.isPassed,
+          },
+        ];
+
+        const sgpa = calculateSGPA(allCourses);
+        const cgpaEval = evaluateCGPA(allCourses);
+
+        const saved = await prisma.publishedResult.upsert({
+          where: { offeringId_studentId: { offeringId, studentId } },
+          create: {
+            offeringId,
+            studentId,
+            currentVersion: 1,
+            internalMarks,
+            externalMarks,
+            totalMarks,
+            grade: gradeResult.grade,
+            gradePoint: gradeResult.gradePoint,
+            isPassed: gradeResult.isPassed,
+            sgpa,
+            cgpa: cgpaEval.cgpa,
+            cgpaStatus: cgpaEval.cgpaStatus,
+            publicationState: 'PUBLISHED',
+            publishedByExamAdminId: req.user!.id,
+          },
+          update: {
+            currentVersion: { increment: 1 },
+            externalMarks,
+            totalMarks,
+            grade: gradeResult.grade,
+            gradePoint: gradeResult.gradePoint,
+            isPassed: gradeResult.isPassed,
+            sgpa,
+            cgpa: cgpaEval.cgpa,
+            cgpaStatus: cgpaEval.cgpaStatus,
+            publicationState: 'PUBLISHED',
+            publishedByExamAdminId: req.user!.id,
+          },
+        });
+
+        await prisma.resultVersionHistory.create({
+          data: {
+            resultId: saved.id,
+            versionNumber: saved.currentVersion,
+            internalMarks: saved.internalMarks,
+            externalMarks: saved.externalMarks,
+            totalMarks: saved.totalMarks,
+            grade: saved.grade,
+            gradePoint: saved.gradePoint,
+            isPassed: saved.isPassed,
+            sgpa: saved.sgpa,
+            cgpa: saved.cgpa,
+            cgpaStatus: saved.cgpaStatus,
+            changeType: 'EXTERNAL_MARKS_ENTRY',
+            reason: 'End-semester external marks recorded by Exam Admin',
+            changedByUserId: req.user!.id,
+          },
+        });
+
+        updatedResults.push(saved);
+      }
+
+      await logAuditEvent({
+        actorUserId: req.user!.id,
+        actorRole: req.user!.role,
+        action: 'EXTERNAL_MARKS_RECORDED',
+        entityType: 'PublishedResult',
+        entityId: offeringId,
+        departmentId: offering.course.departmentId,
+        newData: { offeringId, count: updatedResults.length },
+        req,
+      });
+
+      return res.status(200).json({
+        message: `Successfully recorded external marks for ${updatedResults.length} students`,
+        results: updatedResults,
+      });
+    } catch (err: any) {
+      console.error('External marks entry error:', err);
+      return res.status(500).json({ error: 'INTERNAL_SERVER_ERROR', message: err.message });
+    }
+  }
+);
+
 

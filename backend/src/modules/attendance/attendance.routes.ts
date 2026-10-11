@@ -77,7 +77,6 @@ attendanceRouter.post(
           offeringId,
           facultyId: req.user!.id,
           isActive: true,
-          startDate: { lte: now },
           OR: [{ endDate: null }, { endDate: { gte: now } }],
         },
       });

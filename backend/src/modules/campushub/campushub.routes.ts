@@ -3,60 +3,10 @@ import { z } from 'zod';
 import { prisma } from '../../prisma';
 import { authenticateToken } from '../../middleware/auth';
 import { logAuditEvent } from '../../middleware/audit';
-import fs from 'fs';
-import path from 'path';
-import crypto from 'crypto';
+import { saveBase64Image } from '../../utils/storage';
 
 export const campusHubRouter = Router();
 
-// Ensure uploads directory exists
-const UPLOADS_DIR = path.join(__dirname, '../../../public/uploads');
-if (!fs.existsSync(UPLOADS_DIR)) {
-  fs.mkdirSync(UPLOADS_DIR, { recursive: true });
-}
-
-/**
- * Helper to safely save base64 image data to local disk with sanitized filename
- */
-function saveBase64Image(base64Str: string): string | null {
-  try {
-    const matches = base64Str.match(/^data:([A-Za-z-+\/]+);base64,(.+)$/);
-    if (!matches || matches.length !== 3) {
-      // If it's already a regular HTTP(S) URL or safe /uploads/ path, return as is
-      if (base64Str.startsWith('http://') || base64Str.startsWith('https://')) {
-        return base64Str;
-      }
-      if (base64Str.startsWith('/uploads/') && !base64Str.includes('..')) {
-        return base64Str;
-      }
-      return null;
-    }
-
-    const mimeType = matches[1];
-    const dataBuffer = Buffer.from(matches[2], 'base64');
-
-    // MIME type check (images only)
-    const allowedMime = ['image/jpeg', 'image/png', 'image/webp', 'image/gif'];
-    if (!allowedMime.includes(mimeType)) {
-      return null;
-    }
-
-    // Max 5MB size limit
-    if (dataBuffer.length > 5 * 1024 * 1024) {
-      return null;
-    }
-
-    const ext = mimeType.split('/')[1] || 'jpg';
-    const filename = `campus_${Date.now()}_${crypto.randomBytes(6).toString('hex')}.${ext}`;
-    const filePath = path.join(UPLOADS_DIR, filename);
-
-    fs.writeFileSync(filePath, dataBuffer);
-    return `/uploads/${filename}`;
-  } catch (err) {
-    console.error('Image upload failed:', err);
-    return null;
-  }
-}
 
 // ============================================================================
 // 1. LOST & FOUND ENDPOINTS
@@ -76,20 +26,21 @@ campusHubRouter.get('/lost-found', authenticateToken, async (req: Request, res: 
     const { type, status, category, search } = req.query;
 
     const whereClause: any = {};
-    if (type && (type === 'LOST' || type === 'FOUND')) {
+    if (type && type !== 'ALL' && type !== 'undefined' && (type === 'LOST' || type === 'FOUND')) {
       whereClause.type = type;
     }
-    if (status && (status === 'OPEN' || status === 'CLAIMED' || status === 'RESOLVED')) {
+    if (status && status !== 'ALL' && status !== 'undefined' && (status === 'OPEN' || status === 'CLAIMED' || status === 'RESOLVED')) {
       whereClause.status = status;
     }
-    if (category) {
+    if (category && category !== 'ALL' && category !== 'undefined' && String(category).trim() !== '') {
       whereClause.category = String(category);
     }
-    if (search) {
+    if (search && search !== 'undefined' && String(search).trim() !== '') {
+      const s = String(search).trim();
       whereClause.OR = [
-        { title: { contains: String(search), mode: 'insensitive' } },
-        { description: { contains: String(search), mode: 'insensitive' } },
-        { location: { contains: String(search), mode: 'insensitive' } },
+        { title: { contains: s, mode: 'insensitive' } },
+        { description: { contains: s, mode: 'insensitive' } },
+        { location: { contains: s, mode: 'insensitive' } },
       ];
     }
 
@@ -140,6 +91,7 @@ campusHubRouter.post('/lost-found', authenticateToken, async (req: Request, res:
       },
       include: {
         reportedBy: { select: { id: true, name: true, role: true } },
+        claims: true,
       },
     });
 
@@ -328,10 +280,10 @@ campusHubRouter.get('/events', authenticateToken, async (req: Request, res: Resp
     const { category, departmentId } = req.query;
 
     const whereClause: any = {};
-    if (category && category !== 'ALL') {
+    if (category && category !== 'ALL' && category !== 'undefined' && String(category).trim() !== '') {
       whereClause.category = String(category);
     }
-    if (departmentId) {
+    if (departmentId && departmentId !== 'undefined' && departmentId !== 'ALL' && String(departmentId).trim() !== '') {
       whereClause.departmentId = String(departmentId);
     }
 
@@ -391,6 +343,13 @@ campusHubRouter.get('/events', authenticateToken, async (req: Request, res: Resp
 
 campusHubRouter.post('/events', authenticateToken, async (req: Request, res: Response) => {
   try {
+    if (req.user!.role === 'STUDENT') {
+      return res.status(403).json({
+        error: 'FORBIDDEN',
+        message: 'Students are not authorized to create campus events. Only Faculty and Academic Administrators may publish campus events.',
+      });
+    }
+
     const parseResult = createEventSchema.safeParse(req.body);
     if (!parseResult.success) {
       return res.status(400).json({ error: 'VALIDATION_ERROR', details: parseResult.error.format() });

@@ -180,6 +180,7 @@ async function runApiAudit() {
 
     // Faculty update mark with OCC
     if (markRecord) {
+      const safeMark = markRecord.component?.maxMarks ? Math.max(1, markRecord.component.maxMarks - 2) : 8;
       await checkEndpoint(
         `Faculty Update Mark (${markRecord.id})`,
         'PUT',
@@ -187,7 +188,7 @@ async function runApiAudit() {
         facultyToken,
         {
           expectedVersion: markRecord.version,
-          marksObtained: 13.5,
+          marksObtained: safeMark,
           isAbsent: false,
         },
         200
@@ -731,12 +732,28 @@ async function runApiAudit() {
   const eventsRes = await checkEndpoint('Get Campus Events', 'GET', '/api/hub/events', studentToken, null, 200);
   const itemsRes = await checkEndpoint('Get Lost & Found Items', 'GET', '/api/hub/lost-found', studentToken, null, 200);
 
-  // Student / User Create Campus Event
-  const newEventRes = await checkEndpoint(
-    'Create Campus Event in Campus Hub',
+  // Blocked Event Creation for Student
+  await checkEndpoint(
+    'Block Student from Creating Event (HTTP 403)',
     'POST',
     '/api/hub/events',
     studentToken,
+    {
+      title: `Student Tech Talk ${randNum}`,
+      description: 'Unauthorized student event post',
+      category: 'Technical',
+      venue: 'Auditorium',
+      eventDate: '2026-11-20T09:30:00.000Z',
+    },
+    403
+  );
+
+  // Faculty Create Campus Event
+  const newEventRes = await checkEndpoint(
+    'Faculty Create Campus Event in Campus Hub',
+    'POST',
+    '/api/hub/events',
+    facultyToken,
     {
       title: `Grand Tech Symposium ${randNum}`,
       description: 'Annual inter-departmental innovation hackathon and presentation summit.',
