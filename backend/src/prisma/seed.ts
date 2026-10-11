@@ -4,8 +4,9 @@ import bcrypt from 'bcryptjs';
 const prisma = new PrismaClient();
 
 export async function seedDatabase() {
-  if (process.env.NODE_ENV === 'production') {
-    throw new Error('Refusing to run development seed against production environment.');
+  if (process.env.NODE_ENV === 'production' && process.env.ALLOW_SEED !== 'true') {
+    console.log('[Seed] Production environment detected. Skipping seed (set ALLOW_SEED=true to seed initial demo accounts).');
+    return;
   }
 
   console.log('[Seed] Resetting development database...');
